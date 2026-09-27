@@ -40,6 +40,16 @@ and the package is not registered.
 
 The [user documentation](https://bjmcox.github.io/TandemRNG.jl/) covers draws,
 parallel streams, device binding, integrations, and reproducibility.
+The [validation evidence](https://github.com/BJMCox/TandemRNG.jl/releases/tag/statistical-evidence-2026-09-27)
+contains logs, case matrices, protocols, input hashes, frozen reproduction scripts,
+and flagged results from PractRand, BigCrush, HWD, gjrand, and reduced-round tests.
+
+- [Main validation records](https://github.com/BJMCox/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/tandemrng-validation-records-20260926.7z)
+- [Reduced-round margin records](https://github.com/BJMCox/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/tandemrng-validation-margin-20260927.7z)
+- [Validation audit](https://github.com/BJMCox/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/tandemrng-validation-audit-20260926.tar.zst)
+
+The three archives total 5.42 MiB. Verify downloads against
+[SHA256SUMS](https://github.com/BJMCox/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/SHA256SUMS).
 
 CI runs on pushes to `main`, version tags, and pull requests. Coverage reports the CPU package tests.
 GPU validation and optional integration suites run separately.
