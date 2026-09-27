@@ -8,3 +8,4 @@ TandemRNG = {path = ".."}
 
 [compat]
 Documenter = "1.19.0"
+Random = "< 0.0.1, 1"
