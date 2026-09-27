@@ -29,6 +29,20 @@ end
     end
 end
 
+@testset "stream law: short-fill continuation" begin
+    key = rngkey(Tandem8x32(42))
+    # Same row, next row, next chunk group, and the reconstruction path beyond one row.
+    for (position, count) in ((265, 80), (1928, 100), (32 * 1024 - 512, 128), (1024, 129))
+        rng = Tandem8x32(key, position)
+        expected, scalar = scalar_loop(rng, UInt8, count)
+        values = similar(expected)
+        after = rand_fill!(rng, values; nthreads = 1)
+        @test values == expected
+        @test rngposition(after) == rngposition(scalar)
+        @test rand_next(after, Float64) == rand_next(scalar, Float64)
+    end
+end
+
 @testset "stream law: natural alignment" begin
     rng = Tandem8x32(11)
     _, after_bool = rand_next(rng, Bool)

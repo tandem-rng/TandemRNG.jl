@@ -92,7 +92,8 @@ select a physical GPU through the backend before allocation and execution.
 Reactant supports compiled uniform draws, fills, random access, and static derivations.
 Convert the generator with `Reactant.to_rarray(rng)` before compilation to keep its key
 and position as runtime inputs. See [the integration guide](https://bjmcox.github.io/TandemRNG.jl/integrations/#reactant-integration).
-TandemRNG provides an optional PureRNGs extension for its uniform draw and split interface.
+TandemRNG provides an optional PureRNGs extension for uniform, normal, exponential,
+and distribution draws, together with its split interface. PureRNGs owns the samplers.
 
 ## Precompilation
 

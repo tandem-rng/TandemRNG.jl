@@ -4,6 +4,8 @@ version = "0.1.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GPUArraysCore = "46192b85-c4d5-4398-a991-12ede77f4527"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 PureRNGs = "2ccaadc3-3d9a-45d4-a2ec-95a2424790b7"
@@ -18,6 +20,8 @@ TandemRNG = {path = "../.."}
 
 [compat]
 CUDA = "6.2.2"
+Distributions = "0.25"
+ForwardDiff = "1"
 GPUArraysCore = "0.2.0"
 KernelAbstractions = "0.9.42"
 PureRNGs = "0.0.1"

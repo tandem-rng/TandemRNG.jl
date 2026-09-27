@@ -21,7 +21,7 @@ PureRNGs.rngposition(rng::Generator) = TR.rngposition(rng)
 PureRNGs.rand_at(rng::Generator, ::Type{T}, i::Integer) where {T<:TR.DrawTypes} =
     TR.rand_at(rng, T, i)
 
-function PureRNGs.rand_next!(rng::Generator, destination::AbstractArray; threaded = true)
+function PureRNGs.rand_next!(rng::Generator, destination::AbstractArray; threaded = false)
     _check_threaded(threaded)
     next_rng = TR.rand_fill!(rng, destination; nthreads = threaded ? Threads.nthreads() : 1)
     return destination, next_rng
@@ -42,12 +42,14 @@ PureRNGs.rand_next(rng::Generator, n::Integer, dims::Integer...) =
 
 PureRNGs.splitrng(rng::Generator) = TR.splitrng(rng)
 PureRNGs.splitrng(rng::Generator, n::Val) = TR.splitrng(rng, n)
-function PureRNGs.splitrng(rng::TR.Tandem8x32, n::Integer; threaded = true)
+function PureRNGs.splitrng(rng::TR.Tandem8x32, n::Integer; threaded = false)
     _check_threaded(threaded)
     return TR.splitrng(rng, n; threaded)
 end
 PureRNGs.subrng(rng::Generator, purpose::Integer) = TR.subrng(rng, purpose)
 PureRNGs.StatefulRNG(rng::TR.Tandem8x32) = TR.Stateful(rng)
+
+include("purerngs_engine.jl")
 
 @setup_workload begin
     @compile_workload for K in (1, 32, 64)
@@ -57,6 +59,16 @@ PureRNGs.StatefulRNG(rng::TR.Tandem8x32) = TR.Stateful(rng)
             PureRNGs.rand_at(next_rng, T, 3)
             PureRNGs.rand_next(next_rng, T, 3, 5)
             PureRNGs.rand_next!(next_rng, Vector{T}(undef, 17); threaded = false)
+        end
+        for T in (Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64)
+            PureRNGs.randn_next(rng, T)
+            PureRNGs.randn_at(rng, T, 3)
+            PureRNGs.randn_next!(rng, Vector{T}(undef, 17))
+        end
+        for T in (Float16, Float32, Float64)
+            PureRNGs.randexp_next(rng, T)
+            PureRNGs.randexp_at(rng, T, 3)
+            PureRNGs.randexp_next!(rng, Vector{T}(undef, 17))
         end
         PureRNGs.rand_next(rng)
         PureRNGs.rand_next(rng, (3, 5))

@@ -200,21 +200,70 @@ chunk_length(::Type{<:Tandem8x32{K}}) where {K} = K
 
 # Move exactly one block forward, including a row or group boundary.
 @inline function _next_block(rng::Tandem8x32{K}, pos::UInt64) where {K}
-    o, h = _rotate1(rng.o), rng.h
+    return _next_block(rng.key, rng.o, rng.h, pos, Val(K))
+end
+
+@inline function _next_block(key::O4, o::Row, h::Row, pos::UInt64, ::Val{K}) where {K}
+    o = _rotate1(o)
     if _lane(pos) == 0
         row = _row(pos)
         if row & UInt64(K - 1) != 0
             o, h = step(o, h)
         else
-            o, h = _row_state(_key128(rng.key), row, Val(K))
+            o, h = _row_state(_key128(key), row, Val(K))
         end
     end
     return o, h
 end
 
-# Move the held state to the block of `pos`. Nothing inside the held block. One rotation of
-# `o` to the next block, plus one T when that block starts the next row of the same group or
-# a reseed when it starts a new group. Any other move rebuilds the state from the key.
+# A short forward move reuses the held row and crosses at most eight block boundaries.
+@inline function _advance_short(rng::Tandem8x32{K}, pos::UInt64) where {K}
+    return _advance_short(
+        _key128(rng.key),
+        rng.pos,
+        pos,
+        Val(K),
+        rng.o[1].v,
+        rng.o[2].v,
+        rng.o[3].v,
+        rng.o[4].v,
+        rng.h[1].v,
+        rng.h[2].v,
+        rng.h[3].v,
+        rng.h[4].v,
+    )
+end
+
+# Bare vector arguments travel by value. Passing the generator or rows by pointer would
+# pin the scalar caller's whole state to the stack even when this branch is not taken.
+@noinline function _advance_short(
+    key::UInt128,
+    from::UInt64,
+    pos::UInt64,
+    ::Val{K},
+    o1::V8,
+    o2::V8,
+    o3::V8,
+    o4::V8,
+    h1::V8,
+    h2::V8,
+    h3::V8,
+    h4::V8,
+) where {K}
+    block = from & ~UInt64(BLOCK_BITS - 1)
+    target = pos & ~UInt64(BLOCK_BITS - 1)
+    o = (Lane8(o1), Lane8(o2), Lane8(o3), Lane8(o4))
+    h = (Lane8(h1), Lane8(h2), Lane8(h3), Lane8(h4))
+    key4 = _key4(key)
+    while block != target
+        block += UInt64(BLOCK_BITS)
+        o, h = _next_block(key4, o, h, block, Val(K))
+    end
+    return o, h
+end
+
+# Reuse cached state for forward moves of at most one row. Unsigned subtraction also
+# handles scalar wraparound. Larger jumps and backward moves reconstruct the target.
 @inline function _advance(rng::Tandem8x32{K}, pos::UInt64) where {K}
     held = rng.pos >> 7
     target = pos >> 7
@@ -222,7 +271,11 @@ end
     if target == held + 1
         o, h = _next_block(rng, pos)
     elseif target != held
-        o, h = _state_at(_key128(rng.key), pos, Val(K))
+        if pos - rng.pos <= UInt64(ROW_BITS)
+            o, h = _advance_short(rng, pos)
+        else
+            o, h = _state_at(_key128(rng.key), pos, Val(K))
+        end
     end
     return _rebuild(rng, pos, o, h)
 end

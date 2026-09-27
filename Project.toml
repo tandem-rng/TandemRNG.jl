@@ -24,6 +24,7 @@ TandemRNGCUDAExt = ["CUDA", "KernelAbstractions", "GPUArraysCore", "MLDataDevice
 TandemRNGKernelAbstractionsExt = ["KernelAbstractions", "GPUArraysCore"]
 TandemRNGMetalExt = ["Metal", "KernelAbstractions", "GPUArraysCore", "GPUArrays", "MLDataDevices"]
 TandemRNGPureRNGsExt = "PureRNGs"
+TandemRNGPureRNGsKernelAbstractionsExt = ["PureRNGs", "KernelAbstractions", "GPUArraysCore"]
 TandemRNGReactantExt = "Reactant"
 
 [compat]

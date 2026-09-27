@@ -42,17 +42,50 @@ stateful = PureRNGs.StatefulRNG(rng)
 |:--|:--|
 | `rand_next`, `rand_at` | Uniform scalar, addressed, and allocating draws |
 | `rand_next!` | Destination fill returning `(destination, next_rng)` |
+| `randn_next`, `randn_next!`, `randn_at` | Normal draws |
+| `randexp_next`, `randexp_next!`, `randexp_at` | Exponential draws |
+| `rand_next(rng, distribution, ...)` | Distribution draws using PureRNGs' samplers |
 | `rngkey`, `rngposition` | Current immutable state |
 | `splitrng`, `subrng` | Child derivations with the same stream rules |
 | `StatefulRNG` | A CPU-bound `TandemRNG.Stateful` |
 
 The bridge preserves alignment, final positions, allocation backend, and residence
-checks. Bind with MLDataDevices before array calls. `threaded = false` requests
-a single-threaded CPU fill. Native `rand_fill!` returns only the generator.
+checks. Bind with MLDataDevices before array calls. Destination fills and
+`splitrng(rng, n)` default to `threaded = false`, matching PureRNGs. Pass
+`threaded = true` to enable CPU threading. Native `rand_fill!` returns only the
+generator.
 
-Use `TandemRNG.forkrng` for forks. PureRNGs distribution and continuation methods
-are outside this bridge's scope. The same uniform and static derivation methods
-work with the converted Reactant state.
+Load Distributions to use its supported samplers through PureRNGs:
+
+```julia
+using Distributions
+normal, rng = PureRNGs.randn_next(rng, Float32)
+values, rng = PureRNGs.rand_next(rng, Gamma(2f0, 3f0), 1024)
+columns, rng = PureRNGs.rand_next(rng, Dirichlet([0.2, 1.0, 3.0]), 16)
+```
+
+PureRNGs owns the sampler mathematics and differentiation rules. Tandem supplies
+bits through its native row generator. Normal, exponential, mapped univariate,
+Gamma-family, MvNormal, and Dirichlet draws use this interface. Categorical,
+collection sampling, and range sampling retain PureRNGs' built-in generator APIs.
+
+Each sampler take uses one aligned Tandem slot: one bit for a one-bit take,
+otherwise the smallest of 8, 16, 32, and 64 bits that holds it. The sampler reads
+the slot's most significant bits. `rngposition` remains a bit position. Native
+uniform draws retain their existing stream law.
+
+Scalar draws may wrap at the end of Tandem's stream. Array fills, including
+single-column Dirichlet draws, and addressed draws reject a span that passes the
+end. Fills check the whole span before writing, including multiplication overflow.
+An empty fill still aligns the position to its slot.
+
+Device fills use the generator's bound device. Metal rejects Float64 sampler
+results before kernel compilation. Transcendental results need not be identical
+across backends. PureRNGs' Enzyme rules for device fills do not cover Tandem fills.
+
+Use `TandemRNG.forkrng` for forks. The uniform and static derivation methods also
+work with converted Reactant states. The new distribution methods do not support
+Reactant states.
 
 ## [Reactant](@id reactant-integration)
 

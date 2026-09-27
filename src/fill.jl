@@ -6,6 +6,12 @@
 
 const V4 = NTuple{4,VecElement{UInt32}}
 
+# The optional PureRNGs device extension owns mapped kernels. This hook keeps
+# the two extensions independent of their load order.
+function _fill_mapped!(rng, destination, codec, count, width, slot)
+    throw(ArgumentError("load KernelAbstractions and GPUArraysCore to fill device arrays"))
+end
+
 @inline _v4(w::O4) =
     (VecElement(w[1]), VecElement(w[2]), VecElement(w[3]), VecElement(w[4]))
 

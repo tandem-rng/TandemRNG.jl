@@ -68,8 +68,12 @@ end
     @test PR.rngposition(rng) == 0
 end
 
+include("engine.jl")
+
 if get(ENV, "TANDEM_TEST_CUDA", "false") == "true"
     include("cuda.jl")
+    include("device_engine.jl")
+    TandemDeviceChecks.check(TR.MLDataDevices.CUDADevice(), CUDA.CuArray, CUDA.synchronize)
 end
 
 function compiled_bridge(rng, destination)
@@ -106,4 +110,5 @@ end
         @test TR.Tandem8x32(actual[7]) == expected[7]
         @test Array(output) == destination
     end
+    @test_throws ArgumentError PR.rand_next(input, Normal())
 end
