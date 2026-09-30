@@ -75,6 +75,38 @@ end
     PR._normalize_column!(destination, column)
 end
 
+# Stage contiguous components together, then reuse the ordered column math.
+@kernel function _normalize_tiled_columns!(destination)
+    thread = @index(Local, Linear)
+    component, local_column = @index(Local, NTuple)
+    group = @index(Group, Linear) - 1
+    @uniform width = (@groupsize())[1]
+    @uniform columns_per_group = (@groupsize())[2]
+    column = group * columns_per_group + local_column
+    # An odd pitch spreads adjacent columns across shared-memory banks.
+    storage = @localmem eltype(destination) (width + iseven(width), columns_per_group)
+    tile = @view storage[1:width, :]
+    if column <= size(destination, 2)
+        @inbounds tile[component, local_column] = destination[component, column]
+    end
+    @synchronize
+    if thread <= columns_per_group &&
+       group * columns_per_group + thread <= size(destination, 2)
+        PR._normalize_column!(tile, thread)
+    end
+    @synchronize
+    if column <= size(destination, 2)
+        @inbounds destination[component, column] = tile[component, local_column]
+    end
+end
+
+function _normalize_tiled_columns!(destination::AbstractMatrix, ::Val{W}) where {W}
+    columns = 256 ÷ W
+    normalize! = _normalize_tiled_columns!(get_backend(destination), (W, columns))
+    normalize!(destination; ndrange = (W, columns * cld(size(destination, 2), columns)))
+    return nothing
+end
+
 @kernel function _recover_columns!(
     destination,
     engine::_TileEngine{K},
@@ -237,7 +269,7 @@ end
 
 # A column fill runs in two phases: the log-gamma matrix as an element fill of
 # the component spans, so a workgroup holds a workitem per component instead of
-# one per column, then a workitem per column for the normalization.
+# one per column, then normalize complete columns in the existing component order.
 function TR._fill_mapped!(
     rng::TR.Tandem8x32{K,D},
     destination,
@@ -255,6 +287,11 @@ function TR._fill_mapped!(
         span = UInt64(count) * UInt64(S)
         recover! = _recover_columns!(get_backend(destination), 256)
         recover!(destination, engine, codec, start, span; ndrange = size(destination, 2))
+    elseif D <: TR._CUDABackend &&
+           2 <= size(destination, 1) <= 32 &&
+           size(destination, 2) >= 256 &&
+           eltype(destination) <: AbstractFloat
+        _normalize_tiled_columns!(destination, Val(size(destination, 1)))
     else
         normalize! = _normalize_columns!(get_backend(destination), 256)
         normalize!(destination; ndrange = size(destination, 2))

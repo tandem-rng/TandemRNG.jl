@@ -76,12 +76,12 @@ function check(device, array, synchronize; types = (Float32, Float64))
             end
         end
         rng = device(seed)
-        for T in types, components in (3, 513)
+        for T in types, (components, columns) in ((3, 257), (16, 257), (513, 3))
             d = Dirichlet(fill(T(0.2), components))
-            destination = array(zeros(T, components, 3))
+            destination = array(zeros(T, components, columns))
             result, after = PR.rand_next!(rng, d, destination)
             synchronize()
-            expected = Matrix{T}(undef, components, 3)
+            expected = Matrix{T}(undef, components, columns)
             codec = PR._DirichletCodec(d.alpha)
             state = rng
             for column in axes(expected, 2)
@@ -90,6 +90,17 @@ function check(device, array, synchronize; types = (Float32, Float64))
             @test result === destination
             @test after == state
             @test isapprox(Array(destination), expected; rtol = 64eps(T), atol = 64eps(T))
+        end
+        @testset "Dirichlet strided destination" begin
+            d = Dirichlet(fill(0.2f0, 17))
+            storage = array(fill(NaN32, 34, 257))
+            destination = @view storage[1:2:34, :]
+            _, after = PR.rand_next!(rng, d, destination)
+            expected, next = PR.rand_next(rng, d, 257)
+            synchronize()
+            @test Array(destination) == Array(expected)
+            @test after == next
+            @test all(isnan, Array(storage)[2:2:34, :])
         end
         for T in (Float16, Float32, Complex{Float16}, ComplexF32), n in (0, 1, 63, 64, 65)
             destination = array(zeros(T, n))

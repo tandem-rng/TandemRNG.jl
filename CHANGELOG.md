@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- CUDA Dirichlet batches stage small columns in shared memory for coalesced
+  access, retaining the existing normalization order and draw values.
 - GPU Dirichlet fills recover finite normalized draws when every log-Gamma value
   overflows. Recovery reuses the held bits and works on CUDA and Metal.
 - The PureRNGs bridge supports normal, exponential, and distribution draws through
