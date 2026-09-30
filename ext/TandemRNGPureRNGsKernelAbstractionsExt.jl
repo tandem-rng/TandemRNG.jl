@@ -227,6 +227,96 @@ end
     end
 end
 
+# A long native group owns several input tiles. Its eight producers retain
+# their recurrence states; only a crossing draw reads ahead from a copied state.
+@kernel function _fill_chunk_tiles!(
+    destination,
+    rng::_TileEngine{K},
+    codec,
+    start::UInt64,
+    stop::UInt64,
+    ::Val{C},
+    ::Val{S},
+    ::Val{B},
+    ::Val{L},
+) where {K,C,S,B,L}
+    thread = @index(Local, Linear)
+    @uniform group_bits = UInt64(K * TR.ROW_BITS)
+    @uniform group = start ÷ group_bits + UInt64(@index(Group, Linear) - 1)
+    @uniform group_origin = group * group_bits
+    @uniform first_tile = max(start, group_origin) ÷ UInt64(B)
+    @uniform last_owner = min(stop - UInt64(C*S), group_origin + (group_bits - UInt64(1)))
+    @uniform last_tile = last_owner ÷ UInt64(B)
+    @uniform word_bits = S <= 32 ? 32 : 64
+    words = @localmem (S <= 32 ? UInt32 : UInt64) (B ÷ word_bits + cld(C*S, word_bits))
+    state = @private TR.O4 (2,)
+    if thread <= TR.LANES
+        state[1], state[2] = TR.seed(
+            rng.key,
+            (group << 3) + UInt64(thread-1),
+            TR.DOMAIN_STREAM,
+            TR.AUX_STREAM,
+        )
+        for _ = 1:Int((first_tile*UInt64(B)-group_origin)÷UInt64(TR.ROW_BITS))
+            state[1], state[2] = TR.step(state[1], state[2])
+        end
+    end
+    for tile = first_tile:last_tile
+        @uniform origin = tile * UInt64(B)
+        @uniform edge = origin + min(UInt64(B), stop - origin)
+        @uniform first = origin <= start ? 0 : Int(cld(origin-start, UInt64(C*S)))
+        @uniform last = min(length(destination), Int(cld(edge-start, UInt64(C*S))))
+        @uniform extent = start + UInt64(last) * UInt64(C*S) - origin
+        if thread <= TR.LANES
+            for row = 0:(B÷TR.ROW_BITS-1)
+                state[1], state[2] = TR.step(state[1], state[2])
+                offset = row * TR.ROW_BITS + (thread-1) * TR.BLOCK_BITS
+                TR._store_block!(pointer(words, offset ÷ word_bits + 1), state[1])
+            end
+            # Lookahead uses a copy, so the next tile reuses the retained state.
+            o, h = state[1], state[2]
+            if extent > UInt64(B)
+                if origin - group_origin + UInt64(B) == group_bits
+                    o, h = TR.seed(
+                        rng.key,
+                        ((group+UInt64(1)) << 3) + UInt64(thread-1),
+                        TR.DOMAIN_STREAM,
+                        TR.AUX_STREAM,
+                    )
+                end
+                for row = 0:(Int(cld(extent-UInt64(B), UInt64(TR.ROW_BITS)))-1)
+                    o, h = TR.step(o, h)
+                    for word = 1:(TR.BLOCK_BITS÷word_bits)
+                        offset =
+                            B +
+                            row * TR.ROW_BITS +
+                            (thread-1) * TR.BLOCK_BITS +
+                            (word-1) * word_bits
+                        if UInt64(offset) < extent
+                            raw =
+                                word_bits == 32 ? o[word] :
+                                UInt64(o[2word-1]) | (UInt64(o[2word]) << 32)
+                            @inbounds words[offset÷word_bits+1] = raw
+                        end
+                    end
+                end
+            end
+        end
+        @synchronize
+        for draw = (first+thread):L:last
+            position = start + UInt64(draw-1) * UInt64(C*S)
+            _store_draw!(
+                destination,
+                draw,
+                codec,
+                rng,
+                _TileCursor(words, position, origin, Val(S)),
+            )
+        end
+        @synchronize
+    end
+end
+
 TR._fill_mapped!(
     rng::TR.Tandem8x32{K,D},
     destination,
@@ -250,8 +340,17 @@ function _fill_tiles!(
     bits = 131072
     stop = start + UInt64(length(destination)) * UInt64(count * S)
     threads = count <= 2 ? (S == 32 ? 128 : min(256, 8192 ÷ S)) : 64
-    groups = Int(cld(stop - (start ÷ UInt64(bits)) * UInt64(bits), UInt64(bits)))
-    kernel = _fill_tile!(get_backend(destination), threads)
+    group_bits = UInt64(K * TR.ROW_BITS)
+    if group_bits > UInt64(bits) && stop - start > UInt64(bits)
+        # One tile cannot reuse state. Longer fills retain it across the tiles
+        # whose first draw lies in each native group, excluding tail-only groups.
+        groups =
+            Int((stop - UInt64(count * S)) ÷ group_bits - start ÷ group_bits + UInt64(1))
+        kernel = _fill_chunk_tiles!(get_backend(destination), threads)
+    else
+        groups = Int(cld(stop - (start ÷ UInt64(bits)) * UInt64(bits), UInt64(bits)))
+        kernel = _fill_tile!(get_backend(destination), threads)
+    end
     kernel(
         destination,
         engine,

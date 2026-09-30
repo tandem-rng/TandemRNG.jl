@@ -82,6 +82,8 @@ An empty fill still aligns the position to its slot.
 Device fills use the generator's bound device. Metal rejects Float64 sampler
 results before kernel compilation. Transcendental results need not be identical
 across backends. PureRNGs' Enzyme rules for device fills do not cover Tandem fills.
+Large-chunk fills retain recurrence state across shared-memory tiles instead of
+regenerating each tile's prefix. Small fills keep the single-tile path.
 CUDA stages small Dirichlet columns in shared memory for coalesced access.
 The normalization mathematics and component order remain in PureRNGs.
 Tiny Dirichlet concentrations use PureRNGs' scaled normalization on CUDA and Metal.

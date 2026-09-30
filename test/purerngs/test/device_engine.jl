@@ -152,6 +152,25 @@ function check(device, array, synchronize; types = (Float32, Float64))
                 )
             end
         end
+        # Reuse recurrence state across several tiles, including lookahead into
+        # another native group and the last representable stream region.
+        for (position, d, n) in (
+            (UInt64(1024 * 1024 - 131072 + 31), Gamma(0.2f0, 3.0f0), 517),
+            (typemax(UInt64) - UInt64(3 * 131072 + 31), Normal(2.0f0, 3.0f0), 12288),
+        )
+            source = TR._advance(TR.Tandem8x32{1024}(TR.rngkey(seed)), position)
+            expected, next = PR.rand_next(source, d, n)
+            destination = array(similar(expected))
+            _, after = PR.rand_next!(device(source), d, destination)
+            synchronize()
+            @test TR.rngposition(after) == TR.rngposition(next)
+            @test isapprox(
+                Array(destination),
+                expected;
+                rtol = 64eps(Float32),
+                atol = 64eps(Float32),
+            )
+        end
         # Force the cold Gamma child path instead of waiting for eight rejections.
         codec = PR._GammaCodec(0.2f0, 3.0f0, PR._engine_backend(rng), 0)
         destination = array(zeros(Float32, 129))
