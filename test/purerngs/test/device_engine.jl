@@ -12,8 +12,27 @@ const GX = Base.get_extension(TR, :TandemRNGPureRNGsKernelAbstractionsExt)
     end
 end
 
+function check_dirichlet_recovery(device, array, synchronize; types = (Float32, Float64))
+    @testset "Tiny Dirichlet recovery across a chunk boundary" begin
+        source = TR.Tandem8x32(TR.rngkey(TR.Tandem8x32(42)), 130999)
+        rng = device(source)
+        for T in types
+            tiny = T === Float32 ? T(1e-40) : T(1e-320)
+            distribution = Dirichlet(tiny .* T[1, 2, 3])
+            expected, next = PR.rand_next(source, distribution, 3)
+            destination = array(zeros(T, 3, 3))
+            _, after = PR.rand_next!(rng, distribution, destination)
+            synchronize()
+            @test Array(destination) == expected
+            @test TR.rngposition(after) == TR.rngposition(next)
+            @test Array(PR.rand_at(rng, distribution, 3)) == expected[:, 3]
+        end
+    end
+end
+
 function check(device, array, synchronize; types = (Float32, Float64))
     @testset "Device engine" begin
+        check_dirichlet_recovery(device, array, synchronize; types)
         seed = TR.Tandem8x32(42)
         for T in types, position in (1, 32767)
             rng = device(TR.Tandem8x32(TR.rngkey(seed), position))

@@ -82,6 +82,8 @@ An empty fill still aligns the position to its slot.
 Device fills use the generator's bound device. Metal rejects Float64 sampler
 results before kernel compilation. Transcendental results need not be identical
 across backends. PureRNGs' Enzyme rules for device fills do not cover Tandem fills.
+Tiny Dirichlet concentrations use PureRNGs' scaled normalization on CUDA and Metal.
+Recovery rereads the held bits without changing parent advancement.
 
 Use `TandemRNG.forkrng` for forks. The uniform and static derivation methods also
 work with converted Reactant states. The new distribution methods do not support

@@ -13,9 +13,9 @@ end
 
 @inline PR._engine_backend(rng::_TileEngine) = rng.device
 
-# The rare Gamma fallback usually reads only one block. Carrying eight rows
-# here increases every sampler kernel's register and local-memory requirements.
-struct _FallbackRNG{K}
+# Cold Gamma and Dirichlet recovery read scalar blocks instead of carrying
+# eight rows or using the host generator's UInt128 state builders.
+struct _BlockCursor{K}
     key::TR.O4
     pos::UInt64
     o::TR.O4
@@ -23,23 +23,38 @@ end
 
 @inline function PR._child_cursor(rng::_TileEngine{K}, purpose::UInt64) where {K}
     key = TR._child_key(rng.key, purpose, TR.DOMAIN_FOLD, UInt32(0), 0)
-    child = _FallbackRNG{K}(key, UInt64(0), TR._block_at(key, UInt64(0), K))
+    child = _BlockCursor{K}(key, UInt64(0), TR._block_at(key, UInt64(0), K))
     return child, child
 end
 
-@inline function _advance_child(rng::_FallbackRNG{K}, pos::UInt64) where {K}
+@inline function _advance_block(rng::_BlockCursor{K}, pos::UInt64) where {K}
     o = (pos >> 7) == (rng.pos >> 7) ? rng.o : TR._block_at(rng.key, pos, K)
-    return _FallbackRNG{K}(rng.key, pos, o)
+    return _BlockCursor{K}(rng.key, pos, o)
 end
 
-@inline function PR._take_bits(::_FallbackRNG, cursor::_FallbackRNG, ::Val{W}) where {W}
+@inline function PR._take_bits(
+    ::Union{_TileEngine,_BlockCursor},
+    cursor::_BlockCursor,
+    ::Val{W},
+) where {W}
     slot = W == 1 ? 1 : max(8, nextpow(2, W))
-    cursor = _advance_child(cursor, TR._align_up(cursor.pos, slot))
+    cursor = _advance_block(cursor, TR._align_up(cursor.pos, slot))
     raw =
         slot == 1 ? UInt64(TR._element(Bool, cursor.o, cursor.pos)) :
         UInt64(TR._raw(cursor.o, Int((cursor.pos >> 3) & 15), Val(slot ÷ 8)))
-    return raw >> (slot - W), _advance_child(cursor, cursor.pos + UInt64(slot))
+    return raw >> (slot - W), _advance_block(cursor, cursor.pos + UInt64(slot))
 end
+
+@inline function PR._skip_takes(
+    ::_TileEngine,
+    cursor::_BlockCursor,
+    count::Integer,
+    ::Val{W},
+) where {W}
+    slot = W == 1 ? 1 : max(8, nextpow(2, W))
+    return _advance_block(cursor, cursor.pos + UInt64(count) * UInt64(slot))
+end
+@inline PR._cursor_ordinal(::_TileEngine, cursor::_BlockCursor) = cursor.pos
 
 @inline function _store_draw!(destination, index, codec, rng, cursor)
     value, _ = PR._codec_take(codec, rng, cursor, eltype(destination))
@@ -58,6 +73,19 @@ end
 @kernel function _normalize_columns!(destination)
     column = @index(Global, Linear)
     PR._normalize_column!(destination, column)
+end
+
+@kernel function _recover_columns!(
+    destination,
+    engine::_TileEngine{K},
+    codec,
+    start,
+    span,
+) where {K}
+    column = @index(Global, Linear)
+    position = start + UInt64(column - 1) * span
+    cursor = _BlockCursor{K}(engine.key, position, TR._block_at(engine.key, position, K))
+    PR._normalize_column!(destination, column, codec, engine, cursor)
 end
 
 # The cursor reads a tile in native little-endian word order. Its absolute bit
@@ -216,12 +244,21 @@ function TR._fill_mapped!(
     codec::PR._DirichletCodec,
     count::Integer,
     width::Val,
-    slot::Val,
-) where {K,D<:TR._GPUBackend}
+    slot::Val{S},
+) where {K,D<:TR._GPUBackend,S}
     component_count, _ = PR._component_takes(codec, eltype(destination))
     _fill_tiles!(rng, destination, codec, component_count, slot)
-    normalize! = _normalize_columns!(get_backend(destination), 256)
-    normalize!(destination; ndrange = size(destination, 2))
+    if PR._recover_log_overflow(codec)
+        backend = PR._engine_backend(rng)
+        engine = _TileEngine{K,typeof(backend)}(rng.key, backend)
+        start = TR._align_up(rng.pos, S)
+        span = UInt64(count) * UInt64(S)
+        recover! = _recover_columns!(get_backend(destination), 256)
+        recover!(destination, engine, codec, start, span; ndrange = size(destination, 2))
+    else
+        normalize! = _normalize_columns!(get_backend(destination), 256)
+        normalize!(destination; ndrange = size(destination, 2))
+    end
     return nothing
 end
 
