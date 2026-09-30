@@ -16,6 +16,8 @@ sampler results with an independent reader of native Tandem bytes. Set
 `TANDEM_TEST_CUDA=true` to add CUDA residence, sampler, and device-kernel checks. Set
 `TANDEM_REACTANT_BACKEND=gpu` to run the Reactant checks on a supported GPU.
 CUDA and Reactant must use compatible devices in that combined run.
+Device checks include tiny Dirichlet concentrations across a native chunk boundary.
+The normalization hook rereads the held bits through PureRNGs without advancing the parent stream.
 
 `test/device_engine.jl` also exposes `TandemDeviceChecks.check` for Metal validation
 in an environment containing Metal. Use `Metal.MtlArray`, `Metal.synchronize`,

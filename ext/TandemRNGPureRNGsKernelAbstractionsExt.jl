@@ -13,9 +13,9 @@ end
 
 @inline PR._engine_backend(rng::_TileEngine) = rng.device
 
-# The rare Gamma fallback usually reads only one block. Carrying eight rows
-# here increases every sampler kernel's register and local-memory requirements.
-struct _FallbackRNG{K}
+# Cold Gamma and Dirichlet recovery read scalar blocks instead of carrying
+# eight rows or using the host generator's UInt128 state builders.
+struct _BlockCursor{K}
     key::TR.O4
     pos::UInt64
     o::TR.O4
@@ -23,23 +23,38 @@ end
 
 @inline function PR._child_cursor(rng::_TileEngine{K}, purpose::UInt64) where {K}
     key = TR._child_key(rng.key, purpose, TR.DOMAIN_FOLD, UInt32(0), 0)
-    child = _FallbackRNG{K}(key, UInt64(0), TR._block_at(key, UInt64(0), K))
+    child = _BlockCursor{K}(key, UInt64(0), TR._block_at(key, UInt64(0), K))
     return child, child
 end
 
-@inline function _advance_child(rng::_FallbackRNG{K}, pos::UInt64) where {K}
+@inline function _advance_block(rng::_BlockCursor{K}, pos::UInt64) where {K}
     o = (pos >> 7) == (rng.pos >> 7) ? rng.o : TR._block_at(rng.key, pos, K)
-    return _FallbackRNG{K}(rng.key, pos, o)
+    return _BlockCursor{K}(rng.key, pos, o)
 end
 
-@inline function PR._take_bits(::_FallbackRNG, cursor::_FallbackRNG, ::Val{W}) where {W}
+@inline function PR._take_bits(
+    ::Union{_TileEngine,_BlockCursor},
+    cursor::_BlockCursor,
+    ::Val{W},
+) where {W}
     slot = W == 1 ? 1 : max(8, nextpow(2, W))
-    cursor = _advance_child(cursor, TR._align_up(cursor.pos, slot))
+    cursor = _advance_block(cursor, TR._align_up(cursor.pos, slot))
     raw =
         slot == 1 ? UInt64(TR._element(Bool, cursor.o, cursor.pos)) :
         UInt64(TR._raw(cursor.o, Int((cursor.pos >> 3) & 15), Val(slot ÷ 8)))
-    return raw >> (slot - W), _advance_child(cursor, cursor.pos + UInt64(slot))
+    return raw >> (slot - W), _advance_block(cursor, cursor.pos + UInt64(slot))
 end
+
+@inline function PR._skip_takes(
+    ::_TileEngine,
+    cursor::_BlockCursor,
+    count::Integer,
+    ::Val{W},
+) where {W}
+    slot = W == 1 ? 1 : max(8, nextpow(2, W))
+    return _advance_block(cursor, cursor.pos + UInt64(count) * UInt64(slot))
+end
+@inline PR._cursor_ordinal(::_TileEngine, cursor::_BlockCursor) = cursor.pos
 
 @inline function _store_draw!(destination, index, codec, rng, cursor)
     value, _ = PR._codec_take(codec, rng, cursor, eltype(destination))
@@ -58,6 +73,51 @@ end
 @kernel function _normalize_columns!(destination)
     column = @index(Global, Linear)
     PR._normalize_column!(destination, column)
+end
+
+# Stage contiguous components together, then reuse the ordered column math.
+@kernel function _normalize_tiled_columns!(destination)
+    thread = @index(Local, Linear)
+    component, local_column = @index(Local, NTuple)
+    group = @index(Group, Linear) - 1
+    @uniform width = (@groupsize())[1]
+    @uniform columns_per_group = (@groupsize())[2]
+    column = group * columns_per_group + local_column
+    # An odd pitch spreads adjacent columns across shared-memory banks.
+    storage = @localmem eltype(destination) (width + iseven(width), columns_per_group)
+    tile = @view storage[1:width, :]
+    if column <= size(destination, 2)
+        @inbounds tile[component, local_column] = destination[component, column]
+    end
+    @synchronize
+    if thread <= columns_per_group &&
+       group * columns_per_group + thread <= size(destination, 2)
+        PR._normalize_column!(tile, thread)
+    end
+    @synchronize
+    if column <= size(destination, 2)
+        @inbounds destination[component, column] = tile[component, local_column]
+    end
+end
+
+function _normalize_tiled_columns!(destination::AbstractMatrix, ::Val{W}) where {W}
+    columns = 256 ÷ W
+    normalize! = _normalize_tiled_columns!(get_backend(destination), (W, columns))
+    normalize!(destination; ndrange = (W, columns * cld(size(destination, 2), columns)))
+    return nothing
+end
+
+@kernel function _recover_columns!(
+    destination,
+    engine::_TileEngine{K},
+    codec,
+    start,
+    span,
+) where {K}
+    column = @index(Global, Linear)
+    position = start + UInt64(column - 1) * span
+    cursor = _BlockCursor{K}(engine.key, position, TR._block_at(engine.key, position, K))
+    PR._normalize_column!(destination, column, codec, engine, cursor)
 end
 
 # The cursor reads a tile in native little-endian word order. Its absolute bit
@@ -167,6 +227,96 @@ end
     end
 end
 
+# A long native group owns several input tiles. Its eight producers retain
+# their recurrence states; only a crossing draw reads ahead from a copied state.
+@kernel function _fill_chunk_tiles!(
+    destination,
+    rng::_TileEngine{K},
+    codec,
+    start::UInt64,
+    stop::UInt64,
+    ::Val{C},
+    ::Val{S},
+    ::Val{B},
+    ::Val{L},
+) where {K,C,S,B,L}
+    thread = @index(Local, Linear)
+    @uniform group_bits = UInt64(K * TR.ROW_BITS)
+    @uniform group = start ÷ group_bits + UInt64(@index(Group, Linear) - 1)
+    @uniform group_origin = group * group_bits
+    @uniform first_tile = max(start, group_origin) ÷ UInt64(B)
+    @uniform last_owner = min(stop - UInt64(C*S), group_origin + (group_bits - UInt64(1)))
+    @uniform last_tile = last_owner ÷ UInt64(B)
+    @uniform word_bits = S <= 32 ? 32 : 64
+    words = @localmem (S <= 32 ? UInt32 : UInt64) (B ÷ word_bits + cld(C*S, word_bits))
+    state = @private TR.O4 (2,)
+    if thread <= TR.LANES
+        state[1], state[2] = TR.seed(
+            rng.key,
+            (group << 3) + UInt64(thread-1),
+            TR.DOMAIN_STREAM,
+            TR.AUX_STREAM,
+        )
+        for _ = 1:Int((first_tile*UInt64(B)-group_origin)÷UInt64(TR.ROW_BITS))
+            state[1], state[2] = TR.step(state[1], state[2])
+        end
+    end
+    for tile = first_tile:last_tile
+        @uniform origin = tile * UInt64(B)
+        @uniform edge = origin + min(UInt64(B), stop - origin)
+        @uniform first = origin <= start ? 0 : Int(cld(origin-start, UInt64(C*S)))
+        @uniform last = min(length(destination), Int(cld(edge-start, UInt64(C*S))))
+        @uniform extent = start + UInt64(last) * UInt64(C*S) - origin
+        if thread <= TR.LANES
+            for row = 0:(B÷TR.ROW_BITS-1)
+                state[1], state[2] = TR.step(state[1], state[2])
+                offset = row * TR.ROW_BITS + (thread-1) * TR.BLOCK_BITS
+                TR._store_block!(pointer(words, offset ÷ word_bits + 1), state[1])
+            end
+            # Lookahead uses a copy, so the next tile reuses the retained state.
+            o, h = state[1], state[2]
+            if extent > UInt64(B)
+                if origin - group_origin + UInt64(B) == group_bits
+                    o, h = TR.seed(
+                        rng.key,
+                        ((group+UInt64(1)) << 3) + UInt64(thread-1),
+                        TR.DOMAIN_STREAM,
+                        TR.AUX_STREAM,
+                    )
+                end
+                for row = 0:(Int(cld(extent-UInt64(B), UInt64(TR.ROW_BITS)))-1)
+                    o, h = TR.step(o, h)
+                    for word = 1:(TR.BLOCK_BITS÷word_bits)
+                        offset =
+                            B +
+                            row * TR.ROW_BITS +
+                            (thread-1) * TR.BLOCK_BITS +
+                            (word-1) * word_bits
+                        if UInt64(offset) < extent
+                            raw =
+                                word_bits == 32 ? o[word] :
+                                UInt64(o[2word-1]) | (UInt64(o[2word]) << 32)
+                            @inbounds words[offset÷word_bits+1] = raw
+                        end
+                    end
+                end
+            end
+        end
+        @synchronize
+        for draw = (first+thread):L:last
+            position = start + UInt64(draw-1) * UInt64(C*S)
+            _store_draw!(
+                destination,
+                draw,
+                codec,
+                rng,
+                _TileCursor(words, position, origin, Val(S)),
+            )
+        end
+        @synchronize
+    end
+end
+
 TR._fill_mapped!(
     rng::TR.Tandem8x32{K,D},
     destination,
@@ -190,8 +340,17 @@ function _fill_tiles!(
     bits = 131072
     stop = start + UInt64(length(destination)) * UInt64(count * S)
     threads = count <= 2 ? (S == 32 ? 128 : min(256, 8192 ÷ S)) : 64
-    groups = Int(cld(stop - (start ÷ UInt64(bits)) * UInt64(bits), UInt64(bits)))
-    kernel = _fill_tile!(get_backend(destination), threads)
+    group_bits = UInt64(K * TR.ROW_BITS)
+    if group_bits > UInt64(bits) && stop - start > UInt64(bits)
+        # One tile cannot reuse state. Longer fills retain it across the tiles
+        # whose first draw lies in each native group, excluding tail-only groups.
+        groups =
+            Int((stop - UInt64(count * S)) ÷ group_bits - start ÷ group_bits + UInt64(1))
+        kernel = _fill_chunk_tiles!(get_backend(destination), threads)
+    else
+        groups = Int(cld(stop - (start ÷ UInt64(bits)) * UInt64(bits), UInt64(bits)))
+        kernel = _fill_tile!(get_backend(destination), threads)
+    end
     kernel(
         destination,
         engine,
@@ -209,19 +368,33 @@ end
 
 # A column fill runs in two phases: the log-gamma matrix as an element fill of
 # the component spans, so a workgroup holds a workitem per component instead of
-# one per column, then a workitem per column for the normalization.
+# one per column, then normalize complete columns in the existing component order.
 function TR._fill_mapped!(
     rng::TR.Tandem8x32{K,D},
     destination,
     codec::PR._DirichletCodec,
     count::Integer,
     width::Val,
-    slot::Val,
-) where {K,D<:TR._GPUBackend}
+    slot::Val{S},
+) where {K,D<:TR._GPUBackend,S}
     component_count, _ = PR._component_takes(codec, eltype(destination))
     _fill_tiles!(rng, destination, codec, component_count, slot)
-    normalize! = _normalize_columns!(get_backend(destination), 256)
-    normalize!(destination; ndrange = size(destination, 2))
+    if PR._recover_log_overflow(codec)
+        backend = PR._engine_backend(rng)
+        engine = _TileEngine{K,typeof(backend)}(rng.key, backend)
+        start = TR._align_up(rng.pos, S)
+        span = UInt64(count) * UInt64(S)
+        recover! = _recover_columns!(get_backend(destination), 256)
+        recover!(destination, engine, codec, start, span; ndrange = size(destination, 2))
+    elseif D <: TR._CUDABackend &&
+           2 <= size(destination, 1) <= 32 &&
+           size(destination, 2) >= 256 &&
+           eltype(destination) <: AbstractFloat
+        _normalize_tiled_columns!(destination, Val(size(destination, 1)))
+    else
+        normalize! = _normalize_columns!(get_backend(destination), 256)
+        normalize!(destination; ndrange = size(destination, 2))
+    end
     return nothing
 end
 

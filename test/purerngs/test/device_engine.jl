@@ -12,8 +12,27 @@ const GX = Base.get_extension(TR, :TandemRNGPureRNGsKernelAbstractionsExt)
     end
 end
 
+function check_dirichlet_recovery(device, array, synchronize; types = (Float32, Float64))
+    @testset "Tiny Dirichlet recovery across a chunk boundary" begin
+        source = TR.Tandem8x32(TR.rngkey(TR.Tandem8x32(42)), 130999)
+        rng = device(source)
+        for T in types
+            tiny = T === Float32 ? T(1e-40) : T(1e-320)
+            distribution = Dirichlet(tiny .* T[1, 2, 3])
+            expected, next = PR.rand_next(source, distribution, 3)
+            destination = array(zeros(T, 3, 3))
+            _, after = PR.rand_next!(rng, distribution, destination)
+            synchronize()
+            @test Array(destination) == expected
+            @test TR.rngposition(after) == TR.rngposition(next)
+            @test Array(PR.rand_at(rng, distribution, 3)) == expected[:, 3]
+        end
+    end
+end
+
 function check(device, array, synchronize; types = (Float32, Float64))
     @testset "Device engine" begin
+        check_dirichlet_recovery(device, array, synchronize; types)
         seed = TR.Tandem8x32(42)
         for T in types, position in (1, 32767)
             rng = device(TR.Tandem8x32(TR.rngkey(seed), position))
@@ -57,12 +76,12 @@ function check(device, array, synchronize; types = (Float32, Float64))
             end
         end
         rng = device(seed)
-        for T in types, components in (3, 513)
+        for T in types, (components, columns) in ((3, 257), (16, 257), (513, 3))
             d = Dirichlet(fill(T(0.2), components))
-            destination = array(zeros(T, components, 3))
+            destination = array(zeros(T, components, columns))
             result, after = PR.rand_next!(rng, d, destination)
             synchronize()
-            expected = Matrix{T}(undef, components, 3)
+            expected = Matrix{T}(undef, components, columns)
             codec = PR._DirichletCodec(d.alpha)
             state = rng
             for column in axes(expected, 2)
@@ -71,6 +90,17 @@ function check(device, array, synchronize; types = (Float32, Float64))
             @test result === destination
             @test after == state
             @test isapprox(Array(destination), expected; rtol = 64eps(T), atol = 64eps(T))
+        end
+        @testset "Dirichlet strided destination" begin
+            d = Dirichlet(fill(0.2f0, 17))
+            storage = array(fill(NaN32, 34, 257))
+            destination = @view storage[1:2:34, :]
+            _, after = PR.rand_next!(rng, d, destination)
+            expected, next = PR.rand_next(rng, d, 257)
+            synchronize()
+            @test Array(destination) == Array(expected)
+            @test after == next
+            @test all(isnan, Array(storage)[2:2:34, :])
         end
         for T in (Float16, Float32, Complex{Float16}, ComplexF32), n in (0, 1, 63, 64, 65)
             destination = array(zeros(T, n))
@@ -121,6 +151,25 @@ function check(device, array, synchronize; types = (Float32, Float64))
                     atol = 64eps(Float32),
                 )
             end
+        end
+        # Reuse recurrence state across several tiles, including lookahead into
+        # another native group and the last representable stream region.
+        for (position, d, n) in (
+            (UInt64(1024 * 1024 - 131072 + 31), Gamma(0.2f0, 3.0f0), 517),
+            (typemax(UInt64) - UInt64(3 * 131072 + 31), Normal(2.0f0, 3.0f0), 12288),
+        )
+            source = TR._advance(TR.Tandem8x32{1024}(TR.rngkey(seed)), position)
+            expected, next = PR.rand_next(source, d, n)
+            destination = array(similar(expected))
+            _, after = PR.rand_next!(device(source), d, destination)
+            synchronize()
+            @test TR.rngposition(after) == TR.rngposition(next)
+            @test isapprox(
+                Array(destination),
+                expected;
+                rtol = 64eps(Float32),
+                atol = 64eps(Float32),
+            )
         end
         # Force the cold Gamma child path instead of waiting for eight rejections.
         codec = PR._GammaCodec(0.2f0, 3.0f0, PR._engine_backend(rng), 0)

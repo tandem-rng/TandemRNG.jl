@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- GPU PureRNGs fills reuse recurrence state across shared-memory tiles for long
+  chunks. Small fills and the default chunk length retain their existing path.
+- CUDA Dirichlet batches stage small columns in shared memory for coalesced
+  access, retaining the existing normalization order and draw values.
+- GPU Dirichlet fills recover finite normalized draws when every log-Gamma value
+  overflows. Recovery reuses the held bits and works on CUDA and Metal.
 - The PureRNGs bridge supports normal, exponential, and distribution draws through
   PureRNGs' engine interface, including Dirichlet column fills. Sampler mathematics
   remain in PureRNGs. Native uniform streams retain their existing paths.
