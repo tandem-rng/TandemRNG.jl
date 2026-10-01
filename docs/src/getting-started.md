@@ -6,7 +6,7 @@ Install from GitHub in your project environment:
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/BJMCox/TandemRNG.jl")
+Pkg.add(url = "https://github.com/tandem-rng/TandemRNG.jl")
 ```
 
 Commit your project's `Project.toml` and `Manifest.toml` to retain the source revision.

@@ -17,7 +17,7 @@ makedocs(;
     warnonly = [:linkcheck],
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", "false") == "true",
-        repolink = "https://github.com/BJMCox/TandemRNG.jl",
+        repolink = "https://github.com/tandem-rng/TandemRNG.jl",
         canonical = "https://bjmcox.github.io/TandemRNG.jl/",
         edit_link = "main",
     ),

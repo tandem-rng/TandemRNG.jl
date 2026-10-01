@@ -1,7 +1,7 @@
 # TandemRNG
 
-[![Build Status](https://github.com/BJMCox/TandemRNG.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/BJMCox/TandemRNG.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/BJMCox/TandemRNG.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/BJMCox/TandemRNG.jl)
+[![Build Status](https://github.com/tandem-rng/TandemRNG.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/tandem-rng/TandemRNG.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Coverage](https://codecov.io/gh/tandem-rng/TandemRNG.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/tandem-rng/TandemRNG.jl)
 [![Documentation](https://img.shields.io/badge/docs-guide-blue.svg)](https://bjmcox.github.io/TandemRNG.jl/)
 [![Julia 1.10+](https://img.shields.io/badge/Julia-1.10%2B-9558B2?logo=julia)](https://julialang.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
@@ -40,16 +40,16 @@ and the package is not registered.
 
 The [user documentation](https://bjmcox.github.io/TandemRNG.jl/) covers draws,
 parallel streams, device binding, integrations, and reproducibility.
-The [validation evidence](https://github.com/BJMCox/TandemRNG.jl/releases/tag/statistical-evidence-2026-09-27)
+The [validation evidence](https://github.com/tandem-rng/TandemRNG.jl/releases/tag/statistical-evidence-2026-09-27)
 contains logs, case matrices, protocols, input hashes, frozen reproduction scripts,
 and flagged results from PractRand, BigCrush, HWD, gjrand, and reduced-round tests.
 
-- [Main validation records](https://github.com/BJMCox/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/tandemrng-validation-records-20260926.7z)
-- [Reduced-round margin records](https://github.com/BJMCox/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/tandemrng-validation-margin-20260927.7z)
-- [Validation audit](https://github.com/BJMCox/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/tandemrng-validation-audit-20260926.tar.zst)
+- [Main validation records](https://github.com/tandem-rng/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/tandemrng-validation-records-20260926.7z)
+- [Reduced-round margin records](https://github.com/tandem-rng/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/tandemrng-validation-margin-20260927.7z)
+- [Validation audit](https://github.com/tandem-rng/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/tandemrng-validation-audit-20260926.tar.zst)
 
 The three archives total 5.42 MiB. Verify downloads against
-[SHA256SUMS](https://github.com/BJMCox/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/SHA256SUMS).
+[SHA256SUMS](https://github.com/tandem-rng/TandemRNG.jl/releases/download/statistical-evidence-2026-09-27/SHA256SUMS).
 
 CI runs on pushes to `main`, version tags, and pull requests. Coverage reports the CPU package tests.
 GPU validation and optional integration suites run separately.
@@ -149,7 +149,7 @@ Copyright 2026 Jessica Cox <jmcox@posteo.de>
 
 Licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE).
 
-Report bugs and request features through [GitHub issues](https://github.com/BJMCox/TandemRNG.jl/issues).
+Report bugs and request features through [GitHub issues](https://github.com/tandem-rng/TandemRNG.jl/issues).
 
 **TandemRNG is not a cryptographic PRNG. Do not use it for cryptography or
 security-sensitive applications.**

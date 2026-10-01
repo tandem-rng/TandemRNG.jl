@@ -27,17 +27,17 @@ later, CPU arrays, and optional CUDA, AMDGPU, Metal, and Reactant integrations.
 AMDGPU hardware validation remains open. Version 0.1.0 has no package release yet,
 and the package is not registered.
 
-The [validation evidence release](https://github.com/BJMCox/TandemRNG.jl/releases/tag/statistical-evidence-2026-09-27)
+The [validation evidence release](https://github.com/tandem-rng/TandemRNG.jl/releases/tag/statistical-evidence-2026-09-27)
 contains statistical logs, case matrices, protocols, input hashes, frozen
 reproduction scripts, and flagged results. Finite statistical tests do not prove
 independence or cryptographic security.
 
-The [algorithm specification](https://github.com/BJMCox/TandemRNG.jl/blob/main/SPEC.md)
+The [algorithm specification](https://github.com/tandem-rng/TandemRNG.jl/blob/main/SPEC.md)
 defines the recurrence, seeding, stream order, draw mappings, and test vectors.
-See the [benchmark guide](https://github.com/BJMCox/TandemRNG.jl/blob/main/benchmark/README.md)
+See the [benchmark guide](https://github.com/tandem-rng/TandemRNG.jl/blob/main/benchmark/README.md)
 to reproduce performance measurements.
 
 ## License and support
 
-TandemRNG uses the [Apache License, Version 2.0](https://github.com/BJMCox/TandemRNG.jl/blob/main/LICENSE).
-Report bugs and request features through [GitHub issues](https://github.com/BJMCox/TandemRNG.jl/issues).
+TandemRNG uses the [Apache License, Version 2.0](https://github.com/tandem-rng/TandemRNG.jl/blob/main/LICENSE).
+Report bugs and request features through [GitHub issues](https://github.com/tandem-rng/TandemRNG.jl/issues).
