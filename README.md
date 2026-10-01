@@ -6,7 +6,7 @@
 [![Julia 1.10+](https://img.shields.io/badge/Julia-1.10%2B-9558B2?logo=julia)](https://julialang.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
-Tandem is a random number generator designed for GPUs first: **T**wo-half **A**symmetric
+Tandem is a random number generator built to be fast on CPUs and GPUs alike: **T**wo-half **A**symmetric
 **N**onlinear **D**uplex with **E**volving **M**ultipliers.
 
 **TandemRNG is not a cryptographic PRNG. Do not use it for cryptography or
