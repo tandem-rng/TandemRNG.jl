@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/src/assets/lockup.png" width="560" alt="tandem rng .jl"></p>
+
 # TandemRNG
 
 [![Build Status](https://github.com/tandem-rng/TandemRNG.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/tandem-rng/TandemRNG.jl/actions/workflows/CI.yml?query=branch%3Amain)
