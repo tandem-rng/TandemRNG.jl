@@ -151,16 +151,14 @@ rows of each workgroup in shared memory so a warp writes 512 contiguous bytes.
 | PureRNGs Philox4x32, 2^27 | 1313–1368 | 1197–1295 | 1201–1206 |
 | CUDA.jl native, 2^27 | 571–588 | 1076–1107 | 1077–1084 |
 
-The 2^28 rows match tandem-cuda's tile kernel on the same card (1383 to 1395 GiB/s). At
-2^27 the fixed launch and clock-ramp cost shows, which is why the two sizes differ.
+At 2^27 the fixed launch and clock-ramp cost shows, which is why the two sizes differ.
 Chained scalar Float64 calls through the public A100 API reach about 597 GiB/s. These
 measure different work.
 
 Apple M4 Pro through Metal.jl, load 3.4, minimum of seven after a 0.5 s warm-up: UInt32
 fill 164 GiB/s at 2^26 elements (126 at 2^24), UInt64 163 at 2^25, Float32 155 at 2^26.
 A constant-store kernel reaches 720 GiB/s on the same GPU, so the Apple fill is bound by
-integer throughput, not by memory. The WebGPU shader in tandem-webgpu runs at the same rate
-under Chromium (167 GiB/s). `benchmark/metal/` holds the environment.
+integer throughput, not by memory. `benchmark/metal/` holds the environment.
 
 Use the [public reproduction guide](benchmark/README.md) to benchmark supported result types.
 
