@@ -138,11 +138,24 @@ warm-up; each figure uses the minimum of 30 CUDA event timings.
 
 The core comparison calls both libraries' actual Philox functions in identical kernels,
 folding all generated words into one stored checksum per chunk. Tandem includes seeding.
-Its core throughput is about 1.6× either reference. Full Float32 fills reach 1257–1294
-GiB/s.
+Its core throughput is about 1.6× either reference.
 
-The current public A100 APIs reach about 1,280 GiB/s for packed Float64 fills and
-597 GiB/s for chained scalar Float64 calls. These measure different work.
+A100 fills (2026-10-02), idle GPU, host load 73 to 75 from other users' CPU jobs, three
+passes, minimum of 30 CUDA event timings after a 0.5-second warm-up. The fill stages the
+rows of each workgroup in shared memory so a warp writes 512 contiguous bytes.
+
+| elements | Float32 fill, GiB/s | UInt32 fill, GiB/s | Float64 fill, GiB/s |
+|---|---|---|---|
+| Tandem K=32, 2^28 | 1374–1375 | 1372–1383 | 1402–1404 |
+| Tandem K=32, 2^27 | 1288–1302 | 1144–1299 | 1347–1351 |
+| PureRNGs Philox4x32, 2^27 | 1313–1368 | 1197–1295 | 1201–1206 |
+| CUDA.jl native, 2^27 | 571–588 | 1076–1107 | 1077–1084 |
+
+The 2^28 rows match tandem-cuda's tile kernel on the same card (1383 to 1395 GiB/s). At
+2^27 the fixed launch and clock-ramp cost shows, which is why the two sizes differ.
+Chained scalar Float64 calls through the public A100 API reach about 597 GiB/s. These
+measure different work.
+
 Use the [public reproduction guide](benchmark/README.md) to benchmark supported result types.
 
 ## License and contact
