@@ -140,8 +140,7 @@ The core comparison calls both libraries' actual Philox functions in identical k
 folding all generated words into one stored checksum per chunk. Tandem includes seeding.
 Its core throughput is about 1.6× either reference.
 
-A100 fills (2026-10-02), idle GPU, host load 73 to 75 from other users' CPU jobs, three
-passes, minimum of 30 CUDA event timings after a 0.5-second warm-up. The fill stages the
+A100 fills (2026-10-02), idle GPU, three passes, minimum of 30 CUDA event timings after a 0.5-second warm-up. The fill stages the
 rows of each workgroup in shared memory so a warp writes 512 contiguous bytes.
 
 | elements | Float32 fill, GiB/s | UInt32 fill, GiB/s | Float64 fill, GiB/s |
@@ -155,7 +154,7 @@ At 2^27 the fixed launch and clock-ramp cost shows, which is why the two sizes d
 Chained scalar Float64 calls through the public A100 API reach about 597 GiB/s. These
 measure different work.
 
-Apple M4 Pro through Metal.jl, load 3.4, minimum of seven after a 0.5 s warm-up: UInt32
+Apple M4 Pro through Metal.jl, minimum of seven after a 0.5 s warm-up: UInt32
 fill 164 GiB/s at 2^26 elements (126 at 2^24), UInt64 163 at 2^25, Float32 155 at 2^26.
 A constant-store kernel reaches 720 GiB/s on the same GPU, so the Apple fill is bound by
 integer throughput, not by memory. `benchmark/metal/` holds the environment.

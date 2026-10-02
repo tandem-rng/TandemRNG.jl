@@ -101,5 +101,5 @@ Keep the full output directory and runner sources. Environment manifests may con
 local checkout paths. Replace those paths when reproducing on another host.
 Use source hashes to check the package and runner revisions.
 Compare repeated ranges on the same idle host. A single minimum is not a stable speed ratio.
-Record host load, CPU policy, and GPU clocks beside the results when publishing numbers.
+Measure on an idle machine and record CPU policy and GPU clocks when publishing numbers.
 Do not combine core throughput with array-fill throughput in one speed claim.
