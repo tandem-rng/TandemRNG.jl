@@ -1,0 +1,10 @@
+[deps]
+Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+TandemRNG = "bbf5d0d8-d903-4501-8860-f014e7b03d69"
+
+[sources]
+TandemRNG = {path = "../.."}
+
+[compat]
+Metal = "1.7"
