@@ -37,4 +37,6 @@ The [documentation](https://bjmcox.github.io/TandemRNG.jl/) covers derived draws
 integrations, speed, and the [validation evidence](https://github.com/tandem-rng/TandemRNG.jl/releases/tag/statistical-evidence-2026-09-27).
 [`benchmark/README.md`](benchmark/README.md) reproduces the measurements.
 
+Portions of the code were generated with the assistance of LLMs.
+
 [Documentation](https://bjmcox.github.io/TandemRNG.jl/) · [Apache 2.0 license](LICENSE) · [Issues](https://github.com/tandem-rng/TandemRNG.jl/issues)
