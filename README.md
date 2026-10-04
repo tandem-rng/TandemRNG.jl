@@ -168,19 +168,19 @@ The one-task rows call the immutable fills with `nthreads = 1`.
 | | `rand!` Float64 | `randn!` Float64 | `randn!` Float32 |
 |---|---|---|---|
 | Tandem `Stateful`, 14 tasks | 87.3 | 33.1 | 33.2 |
-| Tandem, one task | 13.5 | 4.53 | 5.15 |
-| Julia `Xoshiro`, one task | 16.1 | 7.22 | 1.26 |
+| Tandem, one task | 17.4 | 4.81 | 5.45 |
+| Julia `Xoshiro`, one task | 20.2 | 7.17 | 1.26 |
 
 | | `randexp!` Float64 | `randexp!` Float32 |
 |---|---|---|
 | Tandem `Stateful`, 14 tasks | 36.3 | 37.6 |
-| Tandem, one task | 5.33 | 6.01 |
+| Tandem, one task | 6.02 | 6.49 |
 | `Random.default_rng()`, one task | 6.39 | 1.15 |
 
 The normals and exponentials run tandem-c's polynomials, vectorized two doubles or four
 floats wide with four interleaved iterations. Julia's ziggurats are faster for one Float64
 task. On the same machine tandem-c reaches 5.0 and 5.5 GiB/s for the one-task normal
-fills and 6.1 and 6.7 for the exponential fills, mostly through its faster uniform fill.
+fills and 6.1 and 6.7 for the exponential fills.
 
 NVIDIA A100 40 GB core measurements (2026-09-21), idle GPU, three passes. Compilation precedes a 0.5-second
 warm-up; each figure uses the minimum of 30 CUDA event timings.
