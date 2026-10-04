@@ -29,6 +29,7 @@ makedocs(;
         "Devices" => "devices.md",
         "Integrations" => "integrations.md",
         "Performance" => "performance.md",
+        "Design and validation" => "design.md",
         "API reference" => "api.md",
     ],
 )

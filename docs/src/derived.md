@@ -79,3 +79,10 @@ fill and map the draws in one task. Derived fills run on the CPU only.
 
 The PureRNGs extension keeps PureRNGs' own samplers: `PureRNGs.randn_next` and the other
 PureRNGs distribution draws do not follow Appendix A.
+
+## Tests
+
+`test/derived.jl` checks the values against copies of tandem-c's `cross_below.h`,
+`cross_normal.h`, and `cross_exponential.h`, tandem-cuda's `cross_fill_below.h` and
+`cross_fill_exponential.h`, and the SHA-256 of tandem-c's 1e6-element normal and
+exponential dumps. Exponentials also pass moment and Kolmogorov-Smirnov tests on 1e7 draws.

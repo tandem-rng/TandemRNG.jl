@@ -18,6 +18,7 @@ values, rng = rand_next(rng, Float32, 4)
 Start with [Getting started](@ref). See [Streams and reproducibility](@ref) for
 parallel jobs and saved state, [Devices](@ref) for GPU arrays, and
 [Integrations](@ref) for Random, PureRNGs, and Reactant.
+[Design and validation](@ref) describes the algorithm and the statistical evidence.
 The [API reference](@ref) lists the exported interface.
 
 ## Current status
