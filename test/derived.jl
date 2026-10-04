@@ -18,7 +18,8 @@ end
 
 @testset "fixture files" begin
     # Byte identical to tandem-c b049384 (cross_below.h, cross_normal.h,
-    # cross_exponential.h) and tandem-cuda 6b2485f (cross_fill_below.h).
+    # cross_exponential.h) and tandem-cuda c5c5725 (cross_fill_below.h,
+    # cross_fill_exponential.h).
     @test fixture_sha256("cross_below.h") ==
           "0119fa58cc98d2da41d140408aaab57264166c73dc5ab22c1b0b725e282ae8f1"
     @test fixture_sha256("cross_fill_below.h") ==
@@ -27,6 +28,8 @@ end
           "e313b2f1cda2301f8c67cfae952219d4898df9a0623372965c39f6bb0edc7003"
     @test fixture_sha256("cross_exponential.h") ==
           "da848bae24dae7d1cde6fdb7ef2e6d2953b76b333ba5139800cba3ae03c85efc"
+    @test fixture_sha256("cross_fill_exponential.h") ==
+          "2a65543dbf94486201ca9310d1ffe328393ca60ab2c53aea8022d5ba739de7b0"
 end
 
 @testset "bounded: scalar draws equal tandem-c" begin
@@ -159,6 +162,17 @@ end
             @test A == want
         end
     end
+    # tandem-cuda's host and device fills, the same key, at unaligned starts.
+    text = fixture_text("cross_fill_exponential.h")
+    for (T, name) in ((Float64, "CROSS_EXP64"), (Float32, "CROSS_EXP32"))
+        for row in c_initializer(text, name)
+            want = parse.(T, row[3])
+            @test length(want) == parse(Int, row[2])
+            A = Vector{T}(undef, length(want))
+            exponential_fill!(Tandem8x32(key, parse(Int, row[1])), A)
+            @test A == want
+        end
+    end
     # tandem-c tools/dump_exponentials.c: seed (2026, 7), 1e6 f64 then 1e6 f32 exponentials
     # from one generator at each start.
     ctx = SHA.SHA256_CTX()
@@ -193,6 +207,14 @@ end
         e = Vector{T}(undef, 2001)
         @test rngposition(exponential_fill!(rng, e)) == rngposition(rand_fill!(rng, similar(e)))
         @test exponential_next(rng, T)[1] == e[1]
+        # An exponential fill cut at any element equals the whole fill.
+        for cut in (1, 7, 1000)
+            head = Vector{T}(undef, cut)
+            tail = Vector{T}(undef, 2001 - cut)
+            exponential_fill!(rng, head)
+            exponential_fill!(Tandem8x32{K}(rngkey(rng), w + w * cut), tail)
+            @test vcat(head, tail) == e
+        end
         # Threads split the fill without changing the values.
         @test normal_fill!(rng, similar(even); nthreads = 3) == normal_fill!(rng, even; nthreads = 1)
         @test even == (A = similar(even); normal_fill!(rng, A; nthreads = 3); A)
@@ -218,6 +240,27 @@ end
         end
         @test all(abs(z[2j-1] - reference[j][1]) <= tolerance(T, z[2j-1]) &&
                   abs(z[2j] - reference[j][2]) <= tolerance(T, z[2j]) for j in eachindex(reference))
+    end
+end
+
+@testset "exponentials: Exp(1) moments and Kolmogorov-Smirnov on 1e7 draws" begin
+    # Raw moments 1, 2, 6, 24 within 5 standard errors. The standard deviation of x^k is
+    # sqrt((2k)! − (k!)^2). The KS bound 1.95/sqrt(n) is the 0.001 critical value.
+    n = 10^7
+    for T in (Float32, Float64)
+        x = Vector{T}(undef, n)
+        exponential_fill!(Tandem8x32(2026), x)
+        for k = 1:4
+            m = sum(Float64(v)^k for v in x) / n
+            se = sqrt(factorial(2k) - factorial(k)^2) / sqrt(n)
+            @test abs(m - factorial(k)) < 5se
+        end
+        sort!(x)
+        d = maximum(eachindex(x)) do i
+            F = -expm1(-Float64(x[i]))
+            return max(i / n - F, F - (i - 1) / n)
+        end
+        @test d < 1.95 / sqrt(n)
     end
 end
 

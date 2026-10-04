@@ -101,8 +101,9 @@ same values as the immutable draws.
 - Empty derived fills leave the position unchanged. Derived fills run on the CPU.
 
 `test/derived.jl` checks the values against copies of tandem-c's `cross_below.h`,
-`cross_normal.h`, and `cross_exponential.h` and tandem-cuda's `cross_fill_below.h`, and
-the 1e6-element normal and exponential dumps of tandem-c against their SHA-256.
+`cross_normal.h`, and `cross_exponential.h`, tandem-cuda's `cross_fill_below.h` and
+`cross_fill_exponential.h`, and the SHA-256 of tandem-c's 1e6-element normal and
+exponential dumps. Exponentials also pass moment and Kolmogorov-Smirnov tests on 1e7 draws.
 
 See [Derived draws](https://bjmcox.github.io/TandemRNG.jl/derived/) for the full rules.
 
@@ -170,9 +171,16 @@ The one-task rows call the immutable fills with `nthreads = 1`.
 | Tandem, one task | 13.5 | 4.53 | 5.15 |
 | Julia `Xoshiro`, one task | 16.1 | 7.22 | 1.26 |
 
-The normals run tandem-c's polynomial Box-Muller, vectorized two doubles or four floats
-wide with four interleaved iterations. Xoshiro's ziggurat is faster for one Float64 task.
-tandem-c reaches 5.0 and 5.5 GiB/s for the one-task normal fills on the same machine.
+| | `randexp!` Float64 | `randexp!` Float32 |
+|---|---|---|
+| Tandem `Stateful`, 14 tasks | 36.3 | 37.6 |
+| Tandem, one task | 5.33 | 6.01 |
+| `Random.default_rng()`, one task | 6.39 | 1.15 |
+
+The normals and exponentials run tandem-c's polynomials, vectorized two doubles or four
+floats wide with four interleaved iterations. Julia's ziggurats are faster for one Float64
+task. On the same machine tandem-c reaches 5.0 and 5.5 GiB/s for the one-task normal
+fills and 6.1 and 6.7 for the exponential fills, mostly through its faster uniform fill.
 
 NVIDIA A100 40 GB core measurements (2026-09-21), idle GPU, three passes. Compilation precedes a 0.5-second
 warm-up; each figure uses the minimum of 30 CUDA event timings.
