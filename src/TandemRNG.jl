@@ -14,6 +14,8 @@ using PrecompileTools: @setup_workload, @compile_workload
 
 export Tandem8x32, Stateful
 export rand_next, rand_at, rand_fill!
+export rand_below_next, rand_below_fill!
+export normal_next, normal_fill!, exponential_next, exponential_fill!
 export splitrng, forkrng, subrng
 export rngkey, rngposition, chunk_length
 
@@ -28,6 +30,7 @@ include("devices.jl")
 include("generator.jl")
 include("split.jl")
 include("fill.jl")
+include("derived.jl")
 include("random.jl")
 include("precompile.jl")
 

@@ -58,7 +58,18 @@
             randexp(st, T, 17)
             randn!(st, Vector{T}(undef, 17))
             randexp!(st, Vector{T}(undef, 17))
+            normal_next(rng, T)
+            exponential_next(rng, T)
+            normal_fill!(rng, Vector{T}(undef, 17); nthreads = 1)
+            exponential_fill!(rng, Vector{T}(undef, 17); nthreads = 1)
         end
+        for U in (UInt32, UInt64)
+            rand_below_next(rng, U(10))
+            rand_below_fill!(rng, Vector{U}(undef, 17), U(10))
+        end
+        rand_next(rng, 1:6)
+        rand_fill!(rng, Vector{Int}(undef, 17), 1:6)
+        rand!(st, Vector{Int}(undef, 17), 1:6)
         Tandem8x32(42)
         Stateful(42)
         rand_next(rng)

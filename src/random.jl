@@ -1,7 +1,7 @@
 # Bridge to the `Random` API. `Stateful` owns one generator value, a position, and a copy of
 # the current row's output words. The value is held at the start of the row of the position
 # and replaced only when a draw leaves that row. A draw inside the row indexes the copied
-# words to avoid copying the generator value on every indexed load. `rand`, `rand!`, `randn`, and
+# words to avoid copying the generator value on every indexed load. `rand`, `rand!`, and
 # every sampler that builds on `rand(rng, UInt64)` work unchanged. Floats keep the stream
 # law: Float64 takes the top 53 bits of a 64-bit draw, Float32 the top 24 bits of a 32-bit
 # draw, and a Bool is one bit.
@@ -79,11 +79,16 @@ end
 @inline _draw!(r::Stateful, ::Type{Complex{T}}) where {T<:FloatTypes} =
     Complex{T}(_draw!(r, T), _draw!(r, T))
 
-function _fill!(r::Stateful, A)
-    v = rand_fill!(Tandem8x32(r), A)
+# Take over the end state of an immutable fill run on the wrapper's generator.
+function _adopt!(r::Stateful, v::Tandem8x32)
     r.value = _advance(v, _row_start(v.pos))
     r.pos = v.pos
     _copy_row!(r)
+    return r
+end
+
+function _fill!(r::Stateful, A)
+    _adopt!(r, rand_fill!(Tandem8x32(r), A))
     return A
 end
 
@@ -118,6 +123,76 @@ for T in (Float16, Float32, Float64)
         A::Array{$T},
         ::Random.SamplerTrivial{Random.CloseOpen01{$T}},
     ) = _fill!(r, A)
+end
+
+# Bounded integers, normals, and exponentials follow SPEC.md Appendix A, as the immutable
+# draws and fills do (derived.jl). Collections and non-unit ranges sample an index range,
+# so they go through the bounded draw as well.
+
+@inline _draw(r::Stateful, ::Type{U}) where {U} = (_draw!(r, U), r)
+
+struct _BoundedSampler{T} <: Random.Sampler{T}
+    first::T
+    span::UInt64
+end
+
+Random.Sampler(
+    ::Type{<:Stateful},
+    r::AbstractUnitRange{T},
+    ::Random.Repetition,
+) where {T<:Base.BitInteger64} = _BoundedSampler{T}(first(r), _span(r))
+
+function Random.Sampler(
+    ::Type{S},
+    r::AbstractUnitRange{T},
+    rep::Random.Repetition,
+) where {S<:Stateful,T<:WideTypes}
+    # Keep Random's sampler for ranges of more than 2^64 values.
+    if !isempty(r) && (last(r) - first(r)) % UInt128 > typemax(UInt64)
+        return invoke(
+            Random.Sampler,
+            Tuple{Type{<:Random.AbstractRNG},AbstractUnitRange{T},Random.Repetition},
+            S,
+            r,
+            rep,
+        )
+    end
+    return _BoundedSampler{T}(first(r), _span(r))
+end
+
+@inline function Random.rand(r::Stateful, sp::_BoundedSampler{T}) where {T}
+    offset, _ = _bounded_offset(r, sp.span)
+    return sp.first + offset % T
+end
+
+function Random.rand!(r::Stateful, A::AbstractArray, sp::_BoundedSampler{T}) where {T}
+    span = sp.span
+    v = Tandem8x32(r)
+    if span <= typemax(UInt32)
+        v = _range_fill!(v, A, sp.first, (span + 1) % UInt32, span == typemax(UInt32))
+    else
+        v = _range_fill!(v, A, sp.first, span + 1, span == typemax(UInt64))
+    end
+    _adopt!(r, v)
+    return A
+end
+
+for T in (Float32, Float64)
+    @eval begin
+        @inline function Random.randn(r::Stateful, ::Type{$T})
+            a = _draw!(r, $T)
+            return _box_muller(a, _draw!(r, $T))[1]
+        end
+        @inline Random.randexp(r::Stateful, ::Type{$T}) = _exponential(_draw!(r, $T))
+        function Random.randn!(r::Stateful, A::AbstractArray{$T})
+            _adopt!(r, normal_fill!(Tandem8x32(r), A))
+            return A
+        end
+        function Random.randexp!(r::Stateful, A::AbstractArray{$T})
+            _adopt!(r, exponential_fill!(Tandem8x32(r), A))
+            return A
+        end
+    end
 end
 
 function Random.seed!(r::Stateful{K}, seed::Integer) where {K}

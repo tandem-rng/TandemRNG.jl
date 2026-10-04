@@ -11,6 +11,7 @@ using Random
     include("result_types.jl")
     include("derive.jl")
     include("random_api.jl")
+    include("derived.jl")
     include("devices.jl")
     include("statistics.jl")
 end
