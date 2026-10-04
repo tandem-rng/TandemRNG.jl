@@ -1,4 +1,4 @@
-# Bounded integers, normals, and exponentials derived from the uniform stream. SPEC.md
+# Bounded integers, normals, and exponentials derived from the uniform stream. Appendix A of the specification
 # Appendix A fixes them so that every port returns the same values: the bounded draws and
 # their fallback keys are exact, and the normals and exponentials copy the C reference's
 # polynomials and fused multiply-adds, so they are bit for bit equal to tandem-c.
@@ -70,7 +70,7 @@ end
 """
     rand_next(rng, r::AbstractUnitRange{<:Integer}) -> (x, rng′)
 
-Draw `x` uniform on the integers of `r` by Lemire's method (SPEC.md Appendix A). The draw
+Draw `x` uniform on the integers of `r` by Lemire's method (Appendix A of the specification). The draw
 width follows the number of values: 32 bits up to 2^32 values, else 64. The element type
 of `r` does not change the value, only its type. A rejected draw retries on the next draw
 of the stream. Ranges of more than 2^64 values are not supported.
@@ -125,7 +125,7 @@ Fill `A` with integers uniform on `0:n-1`, as tandem-c's `tandem_fill_u32_below`
 `tandem_fill_u64_below`. Element `i` maps draw `i` of `rand_fill!(rng, A)` and the fill
 consumes exactly `length(A)` draws. A rejected draw retries on the fallback generator
 `splitrng` index `g` of `subrng(P_w)` of the key at position 0, where `g` is the draw's
-index in the stream (SPEC.md Appendix A). A fill cut at any element boundary therefore
+index in the stream (Appendix A of the specification). A fill cut at any element boundary therefore
 equals the whole fill. An empty fill leaves the position unchanged.
 """
 function rand_below_fill!(rng::Tandem8x32, A::AbstractArray{U}, n::U) where {U<:Union{UInt32,UInt64}}
@@ -268,7 +268,7 @@ const NormalTypes = Union{Float32,Float64}
 """
     normal_next(rng, T = Float64) -> (z, rng′)
 
-A standard normal of type `Float32` or `Float64` by Box-Muller (SPEC.md Appendix A). It
+A standard normal of type `Float32` or `Float64` by Box-Muller (Appendix A of the specification). It
 consumes two uniform draws `a` and `b` of type `T` and returns `sqrt(-2 log(1 - a)) cos(2πb)`,
 element 1 of [`normal_fill!`](@ref). Float32 normals are computed in Float32. The values
 equal tandem-c's `tandem_normal_f64` and `tandem_normal_f32` bit for bit.
@@ -283,7 +283,7 @@ end
     exponential_next(rng, T = Float64) -> (e, rng′)
 
 A standard exponential `-log(1 - u)` of type `Float32` or `Float64` from one uniform draw
-`u` of type `T` (SPEC.md Appendix A), with the polynomial logarithm of the normals. It
+`u` of type `T` (Appendix A of the specification), with the polynomial logarithm of the normals. It
 equals element 1 of [`exponential_fill!`](@ref).
 """
 @inline function exponential_next(rng::Tandem8x32, ::Type{T} = Float64) where {T<:NormalTypes}
@@ -377,7 +377,7 @@ end
 """
     normal_fill!(rng, A::AbstractArray{T}; nthreads = Threads.nthreads()) -> rng′
 
-Fill `A` with standard normals by Box-Muller (SPEC.md Appendix A). Elements `2j − 1` and
+Fill `A` with standard normals by Box-Muller (Appendix A of the specification). Elements `2j − 1` and
 `2j` are the cosine and sine halves from uniform draws `2j − 1` and `2j` of
 `rand_fill!(rng, A)`. The fill consumes `2·cld(n, 2)` uniforms: an odd `n` writes only the
 cosine half of its last pair. An empty fill leaves the position unchanged. The values
@@ -408,7 +408,7 @@ end
     exponential_fill!(rng, A::AbstractArray{T}; nthreads = Threads.nthreads()) -> rng′
 
 Fill `A` with standard exponentials: element `i` is `-log(1 - u)` for uniform draw `i` of
-`rand_fill!(rng, A)` (SPEC.md Appendix A). `T` is `Float32` or `Float64`. The fill consumes
+`rand_fill!(rng, A)` (Appendix A of the specification). `T` is `Float32` or `Float64`. The fill consumes
 `length(A)` uniforms. An empty fill leaves the position unchanged. Threads split the fill as
 in `rand_fill!` without changing the values.
 """

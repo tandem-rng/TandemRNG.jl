@@ -370,7 +370,7 @@ end
 Draw one value of type `T` and return it with the advanced generator. `T` is `Bool`,
 an 8- to 128-bit integer, `Float16`, `Float32`, `Float64`, a complex of those floats,
 or `Char`. Real floats lie in [0, 1); complex values compose two real draws.
-Char uses the fixed-work Unicode scalar mapping specified in `SPEC.md`.
+Char uses the fixed-work Unicode scalar mapping specified in the Tandem8x32 specification.
 Array draws allocate on the generator's backend. Scalar calls run where they are called:
 on the host, or inside a device kernel. Binding preserves the key and position.
 """

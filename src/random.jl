@@ -125,7 +125,7 @@ for T in (Float16, Float32, Float64)
     ) = _fill!(r, A)
 end
 
-# Bounded integers, normals, and exponentials follow SPEC.md Appendix A, as the immutable
+# Bounded integers, normals, and exponentials follow Appendix A of the specification, as the immutable
 # draws and fills do (derived.jl). Collections and non-unit ranges sample an index range,
 # so they go through the bounded draw as well.
 

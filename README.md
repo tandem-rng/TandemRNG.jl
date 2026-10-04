@@ -31,7 +31,7 @@ security-sensitive applications.**
   and ComplexF64. Reactant supports Bool, 8–64-bit integers, and Float16/32/64.
 - The transport form of a generator is its 128-bit key plus a 64-bit bit position.
 
-[SPEC.md](SPEC.md) defines the algorithms, stream order, draw mappings, and test vectors.
+[the specification](https://github.com/tandem-rng/spec/blob/main/SPEC.md) defines the algorithms, stream order, draw mappings, and test vectors.
 
 ## Status
 
@@ -82,7 +82,7 @@ rand(st, 1:6)
 
 ## Derived draws
 
-Bounded integers, normals, and exponentials follow Appendix A of [SPEC.md](SPEC.md), so
+Bounded integers, normals, and exponentials follow Appendix A of [the specification](https://github.com/tandem-rng/spec/blob/main/SPEC.md), so
 TandemRNG returns the values of tandem-c and tandem-cuda bit for bit. `Stateful`'s
 `rand(st, 1:n)`, `rand!(st, A, 1:n)`, `randn`, `randn!`, `randexp`, and `randexp!` give the
 same values as the immutable draws.
