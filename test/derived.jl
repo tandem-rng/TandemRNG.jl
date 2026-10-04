@@ -1,5 +1,6 @@
-# Bounded integers, normals, and exponentials of SPEC.md Appendix A against the fixtures of
-# tandem-c and tandem-cuda, and the decomposition and consumption rules they share.
+# Bounded integers, normals, and exponentials of Appendix A of the specification against
+# the fixtures of tandem-c and tandem-cuda, and the decomposition and consumption rules
+# they share.
 
 include("fixtures.jl")
 
@@ -118,6 +119,10 @@ end
     @test rand_fill!(rng, Int[], 1:10) == rng
     @test normal_fill!(rng, Float64[]) == rng
     @test exponential_fill!(rng, Float32[]) == rng
+    # A full-width range takes the plain fill, which would align the position.
+    st = Stateful(rng)
+    rand!(st, Int32[], typemin(Int32):typemax(Int32))
+    @test Tandem8x32(st) == rng
 end
 
 @testset "normals: pairs equal tandem-c bit for bit" begin
@@ -261,6 +266,30 @@ end
             return max(i / n - F, F - (i - 1) / n)
         end
         @test d < 1.95 / sqrt(n)
+    end
+end
+
+@testset "normals: N(0,1) moments and Kolmogorov-Smirnov on 1e7 draws" begin
+    # Raw moments 0, 1, 0, 3 within 5 standard errors, with E z^2k = 1, 3, 15, 105. A pair is
+    # standard bivariate normal when its squared radius is Exp(1/2) and its angle is uniform
+    # and independent, so KS tests both margins of the 5e6 pairs at the 0.001 level.
+    function ks_passes(x, F)
+        sort!(x)
+        m = length(x)
+        d = maximum(i -> max(i / m - F(x[i]), F(x[i]) - (i - 1) / m), eachindex(x))
+        return d < 1.95 / sqrt(m)
+    end
+    n = 10^7
+    for T in (Float32, Float64)
+        z = Vector{T}(undef, n)
+        normal_fill!(Tandem8x32(2027), z)
+        for (k, μ, μ2k) in ((1, 0, 1), (2, 1, 3), (3, 0, 15), (4, 3, 105))
+            m = sum(Float64(v)^k for v in z) / n
+            @test abs(m - μ) < 5 * sqrt((μ2k - μ^2) / n)
+        end
+        x, y = Float64.(z[1:2:end]), Float64.(z[2:2:end])
+        @test ks_passes(@.(x^2 + y^2), t -> -expm1(-t / 2))
+        @test ks_passes(atan.(y, x), t -> (t + π) / 2π)
     end
 end
 

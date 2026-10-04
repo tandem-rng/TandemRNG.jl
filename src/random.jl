@@ -125,9 +125,9 @@ for T in (Float16, Float32, Float64)
     ) = _fill!(r, A)
 end
 
-# Bounded integers, normals, and exponentials follow Appendix A of the specification, as the immutable
-# draws and fills do (derived.jl). Collections and non-unit ranges sample an index range,
-# so they go through the bounded draw as well.
+# Bounded integers, normals, and exponentials follow Appendix A of the specification, as
+# the immutable draws and fills do (derived.jl). Collections and non-unit ranges sample an
+# index range, so they go through the bounded draw as well.
 
 @inline _draw(r::Stateful, ::Type{U}) where {U} = (_draw!(r, U), r)
 
@@ -165,15 +165,8 @@ end
     return sp.first + offset % T
 end
 
-function Random.rand!(r::Stateful, A::AbstractArray, sp::_BoundedSampler{T}) where {T}
-    span = sp.span
-    v = Tandem8x32(r)
-    if span <= typemax(UInt32)
-        v = _range_fill!(v, A, sp.first, (span + 1) % UInt32, span == typemax(UInt32))
-    else
-        v = _range_fill!(v, A, sp.first, span + 1, span == typemax(UInt64))
-    end
-    _adopt!(r, v)
+function Random.rand!(r::Stateful, A::AbstractArray, sp::_BoundedSampler)
+    _adopt!(r, _bounded_fill!(Tandem8x32(r), A, sp.first, sp.span))
     return A
 end
 
