@@ -32,7 +32,7 @@ contains statistical logs, case matrices, protocols, input hashes, frozen
 reproduction scripts, and flagged results. Finite statistical tests do not prove
 independence or cryptographic security.
 
-The [algorithm specification](https://github.com/tandem-rng/TandemRNG.jl/blob/main/SPEC.md)
+The [algorithm specification](https://github.com/tandem-rng/spec/blob/main/SPEC.md)
 defines the recurrence, seeding, stream order, draw mappings, and test vectors.
 See the [benchmark guide](https://github.com/tandem-rng/TandemRNG.jl/blob/main/benchmark/README.md)
 to reproduce performance measurements.
