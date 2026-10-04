@@ -76,7 +76,10 @@ end
     return (p >> 32) % UInt32, p % UInt32
 end
 
-@inline mulwide(x::Lane8, m::Lane8) = (Lane8(_vmulhi(x.v, m.v)), Lane8(_vmul(x.v, m.v)))
+@inline function mulwide(x::Lane8, m::Lane8)
+    hi, lo = _vmulwide(x.v, m.v)
+    return Lane8(hi), Lane8(lo)
+end
 
 # --- the permutation ----------------------------------------------------------------------
 

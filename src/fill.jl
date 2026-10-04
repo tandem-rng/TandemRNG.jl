@@ -172,27 +172,54 @@ end
         transform(o[4].v),
     )
 end
-@inline function _row_words(::Type{Float64}, o::Row)
-    # Form each store in memory order so Julia can vectorize four adjacent doubles.
-    return ntuple(Val(4)) do k
-        values = ntuple(Val(4)) do j
-            lane_index = 2(k - 1) + (j - 1) ÷ 2 + 1
-            word = 2((j - 1) & 1) + 1
-            l, h = lane(o[word], lane_index), lane(o[word+1], lane_index)
-            raw = UInt64(h) << 32 | UInt64(l)
+# (raw >> 11) · 2^-53 for the four little-endian word pairs of a memory-order vector.
+@static if Sys.ARCH === :aarch64
+    # ucvtf with 53 fraction bits converts and scales in one instruction. The value is
+    # below 2^53, so the result is exact like the product.
+    @inline _vfloat64(a::V8) = Base.llvmcall(
+        (
+            """
+            declare <2 x double> @llvm.aarch64.neon.vcvtfxu2fp.v2f64.v2i64(<2 x i64>, i32)
+            define <8 x i32> @entry(<8 x i32> %0) #0 {
+                %w = bitcast <8 x i32> %0 to <4 x i64>
+                %s = lshr <4 x i64> %w, <i64 11, i64 11, i64 11, i64 11>
+                %a = shufflevector <4 x i64> %s, <4 x i64> poison, <2 x i32> <i32 0, i32 1>
+                %b = shufflevector <4 x i64> %s, <4 x i64> poison, <2 x i32> <i32 2, i32 3>
+                %fa = call <2 x double> @llvm.aarch64.neon.vcvtfxu2fp.v2f64.v2i64(<2 x i64> %a, i32 53)
+                %fb = call <2 x double> @llvm.aarch64.neon.vcvtfxu2fp.v2f64.v2i64(<2 x i64> %b, i32 53)
+                %f = shufflevector <2 x double> %fa, <2 x double> %fb, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+                %r = bitcast <4 x double> %f to <8 x i32>
+                ret <8 x i32> %r
+            }
+            attributes #0 = { alwaysinline }""",
+            "entry",
+        ),
+        V8,
+        Tuple{V8},
+        a,
+    )
+else
+    @inline function _vfloat64(a::V8)
+        raws = reinterpret(NTuple{4,VecElement{UInt64}}, a)
+        values = ntuple(Val(4)) do i
+            raw = raws[i].value
             @static if Sys.ARCH === :x86_64
                 # AVX2 lacks vector UInt64 conversion. Construct the high 52 bits, then
                 # restore bit 53 exactly. This is the same mapping as (raw >> 11) * 2^-53.
                 top52 = reinterpret(Float64, 0x3ff0000000000000 | (raw >> 12)) - 1.0
-                x = top52 + ifelse(iszero(l & UInt32(0x800)), 0.0, 0x1p-53)
+                x = top52 + ifelse(iszero(raw & 0x800), 0.0, 0x1p-53)
             else
-                # AArch64 has native vector UInt64 conversion.
                 x = Float64(raw >> 11) * 0x1p-53
             end
             VecElement(x)
         end
-        reinterpret(V8, values)
+        return reinterpret(V8, values)
     end
+end
+
+@inline function _row_words(::Type{Float64}, o::Row)
+    words = _vtranspose(o[1].v, o[2].v, o[3].v, o[4].v)
+    return map(_vfloat64, words)
 end
 
 # A row wholly inside the range. A dense array takes it as four 32-byte stores (unaligned:
