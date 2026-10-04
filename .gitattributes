@@ -1,0 +1,2 @@
+# The tests compare the fixture copies with the SHA-256 of their sources.
+test/fixtures/* -text
