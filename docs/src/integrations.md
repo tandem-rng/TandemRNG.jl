@@ -4,6 +4,9 @@
 
 [`Stateful`](@ref) implements `Random.AbstractRNG`. It supports `rand`, `rand!`,
 `randn`, `randexp`, ranges, and samplers built on the standard primitive draw methods.
+Integer ranges, collections, `randn`, and `randexp` for Float32 and Float64 follow the
+[derived draws](derived.md) of the specification, so they equal the immutable draws
+and the other Tandem ports.
 
 ```@example random
 using TandemRNG, Random

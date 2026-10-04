@@ -24,6 +24,17 @@ rand_at
 rand_fill!
 ```
 
+## Derived draws
+
+```@docs
+rand_below_next
+rand_below_fill!
+normal_next
+normal_fill!
+exponential_next
+exponential_fill!
+```
+
 ## Child streams
 
 ```@docs

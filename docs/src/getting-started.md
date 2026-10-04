@@ -71,5 +71,7 @@ Floating-point draws lie in `[0, 1)`. Complex draws contain two successive real 
 Character draws produce Unicode scalar values. Integers use their full bit width.
 Device array restrictions appear in [Devices](@ref).
 
-Use [`Stateful`](@ref) with Julia's Random API for ranges, normal draws,
-exponential draws, and other samplers. See [Random](@ref random-integration).
+Integer ranges, normals, and exponentials have immutable draws and fills too, with the
+values every Tandem port returns. See [Derived draws](derived.md).
+Use [`Stateful`](@ref) with Julia's Random API for these and other samplers.
+See [Random](@ref random-integration).

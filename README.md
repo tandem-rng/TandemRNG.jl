@@ -71,9 +71,40 @@ children = splitrng(rng, 1000)          # by index, from the key alone
 rng, forks = forkrng(rng, 8)            # at the current step, parent moves on
 proposals = subrng(rng, 1)              # by purpose id
 
+die, rng = rand_next(rng, 1:6)          # bounded, Lemire, width from the range
+z, rng = normal_next(rng)               # Box-Muller, bit identical to tandem-c
+rng = normal_fill!(rng, A)              # threaded, pairs (z₀, z₁) from uniforms (2j−1, 2j)
+rng = exponential_fill!(rng, A)         # −log(1 − u), one uniform per element
+
 st = Stateful(42)                       # Random.AbstractRNG for rand, rand!, randn, ...
 rand(st, 1:6)
 ```
+
+## Derived draws
+
+Bounded integers, normals, and exponentials follow Appendix A of [SPEC.md](SPEC.md), so
+TandemRNG returns the values of tandem-c and tandem-cuda bit for bit. `Stateful`'s
+`rand(st, 1:n)`, `rand!(st, A, 1:n)`, `randn`, `randn!`, `randexp`, and `randexp!` give the
+same values as the immutable draws.
+
+- **Bounded integers** use Lemire's method. A range of at most 2^32 values draws 32 bits,
+  a larger one 64. The result type does not change the value, and `lo:hi` adds `lo` to a
+  draw on `hi − lo + 1` values. A fill consumes one draw per element. A rejected draw
+  retries on `splitrng(subrng(key at 0, P_w), g)` with `g` the draw's index in the stream,
+  so a fill cut anywhere equals the whole fill. `rand_below_next` and `rand_below_fill!`
+  name the width by the type of `n`, as tandem-c's `u32` and `u64` functions do.
+- **Normals** are Box-Muller pairs `r cos 2πb`, `r sin 2πb` with `r = sqrt(−2 log(1 − a))`
+  from uniform draws `2j − 1` and `2j`. A fill of `n` consumes `2·cld(n, 2)` uniforms.
+  A scalar draw returns the cosine half and consumes two. Float32 normals are computed in
+  Float32. `log`, `cos`, and `sin` are tandem-c's polynomials with explicit `fma`.
+- **Exponentials** are `−log(1 − u)` with the same `log`, one uniform per element.
+- Empty derived fills leave the position unchanged. Derived fills run on the CPU.
+
+`test/derived.jl` checks the values against copies of tandem-c's `cross_below.h`,
+`cross_normal.h`, and `cross_exponential.h` and tandem-cuda's `cross_fill_below.h`, and
+the 1e6-element normal and exponential dumps of tandem-c against their SHA-256.
+
+See [Derived draws](https://bjmcox.github.io/TandemRNG.jl/derived/) for the full rules.
 
 GPU fills load with `using KernelAbstractions, GPUArraysCore` and any backend array:
 
@@ -128,6 +159,20 @@ at least two complete reseeding periods. Every case below allocates zero bytes.
 
 Random123 1.7.1 supplies 23/52 random bits for these Float32/Float64 APIs; the other
 generators supply 24/53.
+
+Apple M4, Julia 1.13.1 with 14 threads, 2026-10-04. Fills of 2^22 elements through the
+`Random` API, best of five, GiB/s written. `Stateful` fills use every thread, Xoshiro one.
+The one-task rows call the immutable fills with `nthreads = 1`.
+
+| | `rand!` Float64 | `randn!` Float64 | `randn!` Float32 |
+|---|---|---|---|
+| Tandem `Stateful`, 14 tasks | 87.3 | 33.1 | 33.2 |
+| Tandem, one task | 13.5 | 4.53 | 5.15 |
+| Julia `Xoshiro`, one task | 16.1 | 7.22 | 1.26 |
+
+The normals run tandem-c's polynomial Box-Muller, vectorized two doubles or four floats
+wide with four interleaved iterations. Xoshiro's ziggurat is faster for one Float64 task.
+tandem-c reaches 5.0 and 5.5 GiB/s for the one-task normal fills on the same machine.
 
 NVIDIA A100 40 GB core measurements (2026-09-21), idle GPU, three passes. Compilation precedes a 0.5-second
 warm-up; each figure uses the minimum of 30 CUDA event timings.

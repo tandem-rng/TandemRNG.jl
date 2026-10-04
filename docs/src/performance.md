@@ -20,6 +20,10 @@ rng = rand_fill!(rng, buffer; nthreads = 1)
 rngposition(rng)
 ```
 
+`normal_fill!` and `exponential_fill!` take the same keyword. They map each group of
+uniforms while it is in cache, with tandem-c's vectorized polynomial `log`, `cos`, and
+`sin`. On one Apple M4 task they write 4.5 GiB/s of Float64 normals and 5.2 of Float32.
+
 For GPU work, allocate on the bound backend and synchronize before measuring completion.
 Host scalar calls on a GPU-bound generator still run on the host.
 

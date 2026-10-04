@@ -25,6 +25,7 @@ makedocs(;
         "Home" => "index.md",
         "Getting started" => "getting-started.md",
         "Streams and reproducibility" => "streams.md",
+        "Derived draws" => "derived.md",
         "Devices" => "devices.md",
         "Integrations" => "integrations.md",
         "Performance" => "performance.md",
