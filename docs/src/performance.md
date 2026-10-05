@@ -67,25 +67,27 @@ calls the immutable fills with `nthreads = 1`, and Xoshiro and Random123 the `Ra
 | `rand!` Float64 | 17.7 | 21.4 | 1.83 |
 | `rand!` Float32 | 17.5 | 20.2 | 1.74 |
 | `rand!` UInt32 | 21.7 | 27.0 | 1.79 |
-| `randn!` Float64 | 6.34 | 7.28 | 1.51 |
+| `randn!` Float64 | 7.87 | 7.20 | 1.49 |
 | `randn!` Float32 | 5.50 | 1.28 | 0.75 |
 | `randexp!` Float64 | 6.02 | 6.45 | 1.31 |
 | `randexp!` Float32 | 6.82 | 1.16 | 0.65 |
 
 In the same window tandem-c reaches 16.6, 16.6 and 19.7 GiB/s for the Float64, Float32 and
-UInt32 fills, 7.7 and 5.6 for the normals and 6.2 and 6.9 for the exponentials. Xoshiro's
+UInt32 fills, 7.7 and 5.6 for the normals and 6.2 and 6.9 for the exponentials. The
+`randn!` Float64 row comes from a later window, in which tandem-c reaches 7.6. Xoshiro's
 normals and exponentials are Julia's ziggurats.
 
 The same fills through `Stateful` on 14 threads:
 
 | 14 tasks | `rand!` | `randn!` | `randexp!` |
 |---|---|---|---|
-| Float64 | 108 | 46.5 | 43.1 |
+| Float64 | 108 | 52.2 | 43.1 |
 | Float32 | 109 | 37.2 | 42.5 |
 | UInt32 | 127 | | |
 
-Float64 normals are the ziggurat: a table pass over each group of UInt64 draws, with the 0.43 %
-of draws that miss resolved on their fallback one at a time. Float32 normals and the
+Float64 normals are the ziggurat: a table pass over each group of UInt64 draws, three draws
+per test. The 0.43 % of draws that miss queue across groups and resolve eight at a time on
+fallbacks seeded eight wide, as in tandem-c. Float32 normals and the
 exponentials run tandem-c's polynomials, vectorized two doubles or four floats wide with four
 interleaved iterations. Every float fill converts the words in the row loop before the store.
 
