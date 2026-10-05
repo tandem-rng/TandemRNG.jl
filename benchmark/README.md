@@ -50,6 +50,13 @@ Random123 1.7.1 uses 23/52 random bits for Float32/Float64 through these sampler
 Tandem, PureRNGs, and Xoshiro use 24/53 bits. These are API comparisons with different
 precision contracts, not claims of identical generator work.
 
+`draws.jl` measures one-task fills of uniforms, normals, and exponentials against Xoshiro and
+both Philox4x32 implementations, and the multithreaded `Stateful` fills:
+
+```sh
+julia --startup-file=no --threads=14 --project=benchmark benchmark/draws.jl 22 3
+```
+
 `benchmarks.jl` also exposes `SUITE` for BenchmarkTools and
 `compare_cpu(io; sizes, passes, seconds, samples, seed, threaded)` for Julia callers.
 

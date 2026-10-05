@@ -22,8 +22,9 @@ rngposition(rng)
 ```
 
 `normal_fill!` and `exponential_fill!` take the same keyword. They map each group of
-uniforms while it is in cache, with tandem-c's vectorized polynomial `log`, `cos`, and
-`sin`. See [Measurements](@ref performance-measurements) for their speed.
+draws while it is in cache, the Float64 normals by the ziggurat's tables and the others with
+tandem-c's vectorized polynomial `log`, `cos`, and `sin`. See
+[Measurements](@ref performance-measurements) for their speed.
 
 For GPU work, allocate on the bound backend and synchronize before measuring completion.
 Host scalar calls on a GPU-bound generator still run on the host.
@@ -57,6 +58,38 @@ Julia processes to measure first-use latency.
 
 ### CPU
 
+Apple M4, Julia 1.13.1, 2026-10-05. One task, fills of 2^22 elements, GiB/s written, best of
+three BenchmarkTools passes with alternating generator order, `benchmark/draws.jl`. Tandem
+calls the immutable fills with `nthreads = 1`, PureRNGs its fills with `threaded = false`, and
+Xoshiro and Random123 the `Random` API.
+
+| one task | Tandem | Xoshiro | PureRNGs Philox4x32 | Random123 Philox4x32 |
+|---|---|---|---|---|
+| `rand!` Float64 | 17.7 | 21.4 | 4.80 | 1.83 |
+| `rand!` Float32 | 17.5 | 20.2 | 5.09 | 1.74 |
+| `rand!` UInt32 | 21.7 | 27.0 | 4.71 | 1.79 |
+| `randn!` Float64 | 6.34 | 7.28 | 1.43 | 1.51 |
+| `randn!` Float32 | 5.50 | 1.28 | 1.09 | 0.75 |
+| `randexp!` Float64 | 6.02 | 6.45 | 2.28 | 1.31 |
+| `randexp!` Float32 | 6.82 | 1.16 | 2.94 | 0.65 |
+
+In the same window tandem-c reaches 16.6, 16.6 and 19.7 GiB/s for the Float64, Float32 and
+UInt32 fills, 7.7 and 5.6 for the normals and 6.2 and 6.9 for the exponentials. Xoshiro's
+normals and exponentials are Julia's ziggurats, and PureRNGs' are its own samplers.
+
+The same fills through `Stateful` on 14 threads:
+
+| 14 tasks | `rand!` | `randn!` | `randexp!` |
+|---|---|---|---|
+| Float64 | 108 | 46.5 | 43.1 |
+| Float32 | 109 | 37.2 | 42.5 |
+| UInt32 | 127 | | |
+
+Float64 normals are the ziggurat: a table pass over each group of UInt64 draws, with the 0.43 %
+of draws that miss resolved on their fallback one at a time. Float32 normals and the
+exponentials run tandem-c's polynomials, vectorized two doubles or four floats wide with four
+interleaved iterations. Every float fill converts the words in the row loop before the store.
+
 Tandem on AMD EPYC 7702P (AVX2), Julia 1.13, 2026-09-26. One task, 2^20 elements,
 three BenchmarkTools passes with alternating generator order. Scalar chains include
 at least two complete reseeding periods. Every case below allocates zero bytes.
@@ -72,30 +105,7 @@ at least two complete reseeding periods. Every case below allocates zero bytes.
 | Xoshiro | 1.29–1.29 | 6.41–6.41 | 14.23–14.23 | 16.61–16.62 |
 
 Random123 1.7.1 supplies 23/52 random bits for these Float32/Float64 APIs; the other
-generators supply 24/53.
-
-Apple M4, Julia 1.13.1 with 14 threads, 2026-10-04. Fills of 2^22 elements through the
-`Random` API, best of five, GiB/s written. `Stateful` fills use every thread, Xoshiro one.
-The one-task rows call the immutable fills with `nthreads = 1`.
-
-| | `rand!` Float64 | `randn!` Float64 | `randn!` Float32 |
-|---|---|---|---|
-| Tandem `Stateful`, 14 tasks | 87.3 | 40.6 | 33.2 |
-| Tandem, one task | 17.4 | 6.24 | 5.45 |
-| Julia `Xoshiro`, one task | 20.2 | 7.17 | 1.26 |
-
-| | `randexp!` Float64 | `randexp!` Float32 |
-|---|---|---|
-| Tandem `Stateful`, 14 tasks | 36.3 | 37.6 |
-| Tandem, one task | 6.02 | 6.49 |
-| `Random.default_rng()`, one task | 6.39 | 1.15 |
-
-The Float64 normal cells are from 2026-10-05, after the move to the ziggurat. A Float64 normal
-fill maps each group of UInt64 draws by a table pass, and the 0.43 % of draws that miss seed
-their fallback one at a time. The Float32 normals and the exponentials run tandem-c's
-polynomials, vectorized two doubles or four floats wide with four interleaved iterations.
-Julia's ziggurat is faster for one Float64 task. On the same machine tandem-c reaches 7.7 and
-5.5 GiB/s for the one-task normal fills and 6.1 and 6.7 for the exponential fills.
+generators supply 24/53. This table predates the Float32 fill through the full-group loop.
 
 ### GPU
 
