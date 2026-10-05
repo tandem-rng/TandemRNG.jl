@@ -92,11 +92,13 @@ through the PureRNGs bridge.
 
 | generator | chain, GiB/s |
 |---|---|
-| Tandem native | 4.44–5.85 |
-| Tandem bridge | 5.48–5.85 |
-| Random123 Philox4x32 | 1.42–1.51 |
-| Random123 Philox4x64 | 2.48–2.52 |
-| Xoshiro | 8.60–8.64 |
+| Tandem native | 5.62–7.07 |
+| Tandem bridge | 5.63–6.96 |
+| Random123 Philox4x32 | 1.83–1.85 |
+| Random123 Philox4x64 | 3.00–3.07 |
+| Xoshiro | 10.2–10.4 |
+
+The Tandem chains are bimodal: each pass lands near 5.6 or near 7.0 GiB/s.
 
 Float64 normals are the ziggurat: a table pass over each group of UInt64 draws, three draws
 per test. The 0.43 % of draws that miss queue across groups and resolve eight at a time on
