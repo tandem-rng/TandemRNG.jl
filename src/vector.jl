@@ -137,8 +137,10 @@ const V32 = NTuple{32,VecElement{UInt8}}
     )
 else
     # Keep float lanes together until the final bitcast so Julia can vectorize the conversion.
+    # The value is below 2^24, so the signed conversion is exact. AVX2 has one instruction for
+    # it and none for the unsigned one.
     @inline _vfloat32(a::V8) = reinterpret(
         V8,
-        ntuple(i -> VecElement(Float32(a[i].value >> 8) * Float32(0x1p-24)), Val(8)),
+        ntuple(i -> VecElement(Float32((a[i].value >> 8) % Int32) * Float32(0x1p-24)), Val(8)),
     )
 end

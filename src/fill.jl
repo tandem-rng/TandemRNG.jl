@@ -113,9 +113,8 @@ function _fill_group!(
     ::Val{K},
 ) where {T,K}
     prow = g * (UInt64(ROW_BITS) * UInt64(K))
-    # Test once per complete group. Float32 keeps the bounded loop: the separate loop
-    # loses throughput on both measured CPU architectures.
-    if T !== Float32 && p0 <= prow && UInt64(ROW_BITS) * UInt64(K) <= pend - prow
+    # Test once per complete group.
+    if p0 <= prow && UInt64(ROW_BITS) * UInt64(K) <= pend - prow
         return _fill_full_group!(A, key, g, p0, Val(K))
     end
     o, h = seed_row(key, g)
