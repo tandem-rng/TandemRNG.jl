@@ -281,11 +281,54 @@ end
 @inline _unit(d::UInt64) = Float64(d >> 11) * 0x1p-53
 
 # The slow path of a draw r that missed, whose global draw index is g, on the fallback
-# split(g) of `sub`. ln is −0.5·_neg2_log, exact given _neg2_log. Julia does not contract a
-# product into a sum, so every other operation rounds once, as the appendix requires.
+# split(g) of `sub`.
 @noinline function _zig_miss(sub::O4, ::Val{K}, r::UInt64, g::UInt64) where {K}
     key = _child_key(sub, g >> 1, DOMAIN_SPLIT, UInt32(0), g & 1)
-    blk = _block_at(key, UInt64(0), K)
+    return _zig_slow(key, _block_at(key, UInt64(0), K), r, Val(K))
+end
+
+# The fallback keys and first blocks of the misses at global draw indices g, one per lane:
+# the two F of `_zig_miss` eight wide.
+@inline function _fallback_seed8(sub::O4, g::NTuple{8,UInt64})
+    c = map(x -> x >> 1, g)
+    lo, hi = Lane8(map(x -> x % UInt32, c)), Lane8(map(x -> (x >> 32) % UInt32, c))
+    split = (lo, hi, Lane8(DOMAIN_SPLIT), Lane8(UInt32(0)))
+    even, odd = seed(split, ntuple(w -> Lane8(sub[w]), Val(4)))
+    key = ntuple(Val(4)) do w
+        Lane8(ntuple(l -> isodd(g[l]) ? lane(odd[w], l) : lane(even[w], l), Val(8)))
+    end
+    zero8 = Lane8(UInt32(0))
+    blk, _ = step(seed((zero8, zero8, Lane8(DOMAIN_STREAM), Lane8(AUX_STREAM)), key)...)
+    return key, blk
+end
+
+@inline _lane4(t::NTuple{4,Lane8}, l::Int) = ntuple(w -> lane(t[w], l), Val(4))
+
+# Resolve the first m ≤ 8 queued misses at indices ks of R, which shares A's storage and
+# still holds their raw draws. Spare lanes repeat a queued index and go unused. On the M4
+# the eight-wide seeding costs 0.85 of eight scalar ones, but eight misses back to back cost
+# 0.6 of eight misses resolved one at a time.
+@noinline function _zig_resolve!(
+    A,
+    R,
+    ks::NTuple{8,Int},
+    m::Int,
+    sub::O4,
+    g0::UInt64,
+    ::Val{K},
+) where {K}
+    g = ntuple(l -> g0 + UInt64(ks[min(l, m)] - 1), Val(8))
+    key, blk = _fallback_seed8(sub, g)
+    for l = 1:m
+        k = ks[l]
+        @inbounds A[k] = _zig_slow(_lane4(key, l), _lane4(blk, l), R[k], Val(K))
+    end
+    return nothing
+end
+
+# ln is −0.5·_neg2_log, exact given _neg2_log. Julia does not contract a product into a sum,
+# so every other operation rounds once, as the appendix requires.
+@inline function _zig_slow(key::O4, blk::O4, r::UInt64, ::Val{K}) where {K}
     d = 0
     while true
         i = (r & 0x3ff) % Int
@@ -347,7 +390,14 @@ end
 # Uniform-fill A[1:count] group by group and pass each run of completed elements to
 # `map!(A, i, j)` while it is still in cache. Runs start after and end on multiples of
 # `unit`. Groups are distributed over tasks as in `rand_fill!`. A unit that straddles two
-# tasks is mapped after both have written it.
+# tasks is mapped after both have written it. With a `state`, each task threads its own copy
+# through `state = map!(A, i, j, state)` and ends with `flush!(A, state)`.
+function _fill_then_map!(map!::F, A, key, p0, count, unit, nthreads, k::Val) where {F}
+    stateful(A, i, j, s) = (map!(A, i, j); s)
+    flush!(A, s) = nothing
+    return _fill_then_map!(stateful, A, key, p0, count, unit, nthreads, k, nothing, flush!)
+end
+
 function _fill_then_map!(
     map!::F,
     A::AbstractArray{T},
@@ -357,7 +407,9 @@ function _fill_then_map!(
     unit::Int,
     nthreads::Integer,
     ::Val{K},
-) where {F,T,K}
+    state::S,
+    flush!::G,
+) where {F,T,K,S,G}
     nthreads >= 1 || throw(ArgumentError("nthreads must be at least 1"))
     nb = UInt64(draw_bits(T))
     pend = p0 + nb * UInt64(count)
@@ -371,12 +423,17 @@ function _fill_then_map!(
     end
     function run(first_group, last_group)
         done = first_group == g0 ? 0 : cld(written(first_group - 1), unit) * unit
+        s = state
         for g = first_group:last_group
             _fill_group!(A, key, g, p0, pend, Val(K))
             upto = written(g) ÷ unit * unit
-            upto > done && map!(A, done + 1, upto)
+            if upto > done
+                s = map!(A, done + 1, upto, s)
+            end
             done = max(done, upto)
         end
+        flush!(A, s)
+        return nothing
     end
     nt = min(Int(nthreads), Int(g1 - g0 + 1))
     if nt <= 1
@@ -391,7 +448,7 @@ function _fill_then_map!(
     end
     for t = 1:(nt-1)
         c = written(first_group(t) - 1)
-        c % unit == 0 || map!(A, c - c % unit + 1, c - c % unit + unit)
+        c % unit == 0 || flush!(A, map!(A, c - c % unit + 1, c - c % unit + unit, state))
     end
     return nothing
 end
@@ -429,22 +486,39 @@ end
 
 # Map the raw draws R[i:j] to normals in A[i:j]. R shares A's storage. The inner loop runs to
 # the next miss and holds no call, which made the map 1.6 times faster on Zen 2 than a call
-# in its body. A group of draws holds about two misses for K = 32, so seeding the fallbacks
-# eight at a time on the row lanes, as tandem-c does, measured slower here.
-@inline function _zig_map!(A, R, i::Int, j::Int, sub::O4, g0::UInt64, ::Val{K}) where {K}
+# in its body. It tests three draws at a time: on the M4 the in-place map ran 1.39 times
+# faster than one at a time, and 1.07 and 1.09 times faster than two and four. A group of
+# draws holds about two misses for K = 32, so the misses queue across groups in
+# `q = (indices, count)` and resolve eight at a time, as in tandem-c.
+@inline function _zig_map!(A, R, i::Int, j::Int, q, sub::O4, g0::UInt64, ::Val{K}) where {K}
+    ks, m = q
     k = i
     @inbounds while k <= j
-        while k <= j
-            x, inner = _zig_candidate(R[k])
-            inner || break
-            A[k] = x
-            k += 1
+        while k + 2 <= j
+            x1, inner1 = _zig_candidate(R[k])
+            x2, inner2 = _zig_candidate(R[k+1])
+            x3, inner3 = _zig_candidate(R[k+2])
+            inner1 & inner2 & inner3 || break
+            A[k] = x1
+            A[k+1] = x2
+            A[k+2] = x3
+            k += 3
         end
         k > j && break
-        A[k] = _zig_miss(sub, Val(K), R[k], g0 + UInt64(k - 1))
+        x, inner = _zig_candidate(R[k])
+        if inner
+            A[k] = x
+        else
+            m += 1
+            ks = Base.setindex(ks, k, m)
+            if m == 8
+                _zig_resolve!(A, R, ks, 8, sub, g0, Val(K))
+                m = 0
+            end
+        end
         k += 1
     end
-    return nothing
+    return ks, m
 end
 
 """
@@ -475,9 +549,10 @@ function normal_fill!(
     n == 0 && return _advance(rng, p0)
     sub, g0 = _normal_sub(rng.key), p0 >> 6
     R = reinterpret(UInt64, A)
-    _fill_then_map!(R, rng.key, p0, n, 1, nthreads, Val(K)) do R, i, j
-        _zig_map!(A, R, i, j, sub, g0, Val(K))
-    end
+    map!(R, i, j, q) = _zig_map!(A, R, i, j, q, sub, g0, Val(K))
+    flush!(R, (ks, m)) = m > 0 && _zig_resolve!(A, R, ks, m, sub, g0, Val(K))
+    queue = (ntuple(_ -> 0, Val(8)), 0)
+    _fill_then_map!(map!, R, rng.key, p0, n, 1, nthreads, Val(K), queue, flush!)
     return _advance(rng, p0 + UInt64(64) * UInt64(n))
 end
 
