@@ -2,8 +2,7 @@
 using Printf
 
 const engine = only(ARGS)
-engine in
-("tandem", "bridge", "pure32", "pure64", "random123-32", "random123-64", "xoshiro") ||
+engine in ("tandem", "random123-32", "random123-64", "xoshiro") ||
     throw(ArgumentError("unknown engine: $engine"))
 
 function report(label, stats)
@@ -16,10 +15,6 @@ end
 println("operation\tseconds\tallocated_bytes\tcompile_seconds")
 if engine == "tandem"
     report("load", @timed @eval import Random, TandemRNG)
-elseif engine == "bridge"
-    report("load", @timed @eval import Random, TandemRNG, PureRNGs)
-elseif startswith(engine, "pure")
-    report("load", @timed @eval import Random, PureRNGs)
 elseif startswith(engine, "random123")
     report("load", @timed @eval import Random, Random123)
 else
@@ -28,12 +23,8 @@ end
 
 rng = report(
     "construct",
-    @timed if engine in ("tandem", "bridge")
+    @timed if engine == "tandem"
         TandemRNG.Tandem8x32(42)
-    elseif engine == "pure32"
-        PureRNGs.Philox4x32(42)
-    elseif engine == "pure64"
-        PureRNGs.Philox4x64(42)
     elseif startswith(engine, "random123")
         Random123.Philox4x(endswith(engine, "32") ? UInt32 : UInt64, (0, 42), 10)
     else
@@ -65,9 +56,6 @@ for T in (
     if engine == "tandem"
         report("$T/next", @timed TandemRNG.rand_next(rng, T))
         report("$T/fill", @timed TandemRNG.rand_fill!(rng, A; nthreads = 1))
-    elseif engine == "bridge" || startswith(engine, "pure")
-        report("$T/next", @timed PureRNGs.rand_next(rng, T))
-        report("$T/fill", @timed PureRNGs.rand_next!(rng, A; threaded = false))
     else
         # Match Random123's array precision instead of its direct 32-bit Float64 draw.
         sampler = Random.Sampler(rng, T)

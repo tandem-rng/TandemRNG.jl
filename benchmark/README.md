@@ -6,16 +6,10 @@ Each run requires a new output directory. A failed run retains its partial resul
 
 ## CPU setup
 
-Clone PureRNGs beside the TandemRNG checkout:
-
-```sh
-git clone https://github.com/BJMCox/PureRNGs.jl ../PureRNGs.jl
-```
-
 Run these commands from the TandemRNG repository root:
 
 ```sh
-julia --startup-file=no --project=benchmark -e 'using Pkg; Pkg.develop([PackageSpec(path="."), PackageSpec(path="../PureRNGs.jl")]); Pkg.instantiate(); Pkg.precompile()'
+julia --startup-file=no --project=benchmark -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate(); Pkg.precompile()'
 julia --startup-file=no --threads=8 --gcthreads=1 --project=benchmark benchmark/run.jl cpu results/cpu
 ```
 
@@ -25,8 +19,8 @@ The scripts require Julia 1.10 or newer.
 
 Use an idle host. Stop other benchmarks and statistical jobs before measuring.
 Choose the Julia thread count for the intended deployment.
-The CPU report separates one-task fills from fills using each package's default
-thread policy. Xoshiro and Random123 only appear in the one-task comparison.
+The CPU report separates one-task fills from Tandem's default threaded fills.
+Xoshiro and Random123 only appear in the one-task comparison.
 
 Optional settings:
 
@@ -43,11 +37,10 @@ Fills compare Float64, Float32, UInt32, and Bool. Throughput counts destination 
 including one byte per Bool. All scalar types include signed integers, complex floats,
 and Char. The checksum includes every draw.
 
-Native Tandem and its PureRNGs bridge must agree on output and end state before timing.
-The bridge uses direct public calls without a benchmark-only RNG wrapper.
+The threaded Tandem fill must equal the one-task fill before timing.
 Tandem and each reference use their normal public implementations.
 Random123 1.7.1 uses 23/52 random bits for Float32/Float64 through these sampler paths.
-Tandem, PureRNGs, and Xoshiro use 24/53 bits. These are API comparisons with different
+Tandem and Xoshiro use 24/53 bits. These are API comparisons with different
 precision contracts, not claims of identical generator work.
 
 `draws.jl` measures one-task fills of uniforms, normals, and exponentials against Xoshiro and
@@ -62,7 +55,13 @@ julia --startup-file=no --threads=14 --project=benchmark benchmark/draws.jl 22 3
 
 ## CUDA setup
 
-The GPU runner requires CUDA 6, an NVIDIA GPU, and `nvidia-smi` on PATH.
+The GPU runner requires CUDA 6, an NVIDIA GPU, and `nvidia-smi` on PATH. It also needs
+PureRNGs cloned beside the TandemRNG checkout:
+
+```sh
+git clone https://github.com/BJMCox/PureRNGs.jl ../PureRNGs.jl
+```
+
 Use the separate environment:
 
 ```sh

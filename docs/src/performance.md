@@ -87,18 +87,17 @@ The same fills through `Stateful` on 14 threads:
 
 Scalar chains of 1024 Float64 draws, which span two complete K = 32 groups and so include
 the reseeding, one task, three passes with alternating generator order, GiB/s at 8 bytes per
-draw, `compare_cpu` in `benchmark/benchmarks.jl`. Tandem chains `rand_next`, natively and
-through the PureRNGs bridge.
+draw, `compare_cpu` in `benchmark/benchmarks.jl`. Tandem chains `rand_next`, and the
+references draw through the `Random` sampler.
 
 | generator | chain, GiB/s |
 |---|---|
-| Tandem native | 5.62–7.07 |
-| Tandem bridge | 5.63–6.96 |
-| Random123 Philox4x32 | 1.83–1.85 |
-| Random123 Philox4x64 | 3.00–3.07 |
-| Xoshiro | 10.2–10.4 |
+| Tandem | 5.53–5.76 |
+| Random123 Philox4x32 | 1.84–1.86 |
+| Random123 Philox4x64 | 3.03–3.03 |
+| Xoshiro | 10.5–10.6 |
 
-The Tandem chains are bimodal: each pass lands near 5.6 or near 7.0 GiB/s.
+The Tandem chain rate moves between runs: some passes in other windows reached 7.0 GiB/s.
 
 Float64 normals are the ziggurat: a table pass over each group of UInt64 draws, three draws
 per test. The 0.43 % of draws that miss queue across groups and resolve eight at a time on

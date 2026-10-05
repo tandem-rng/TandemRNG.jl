@@ -1,5 +1,5 @@
 using Dates, SHA, TOML
-import TandemRNG, PureRNGs, Random123, BenchmarkTools
+import TandemRNG, Random123, BenchmarkTools
 
 function options(args)
     length(args) >= 2 || throw(
@@ -69,7 +69,7 @@ function run_benchmarks(config)
     )
     save_status()
     try
-        modules = (TandemRNG, PureRNGs, Random123, BenchmarkTools)
+        modules = (TandemRNG, Random123, BenchmarkTools)
         metadata = Dict{String,Any}(
             "julia" => string(VERSION),
             "machine" => Sys.MACHINE,
@@ -126,15 +126,7 @@ function run_benchmarks(config)
             end
         else
             for pass = 1:config.passes,
-                engine in (
-                    "tandem",
-                    "bridge",
-                    "pure32",
-                    "pure64",
-                    "random123-32",
-                    "random123-64",
-                    "xoshiro",
-                )
+                engine in ("tandem", "random123-32", "random123-64", "xoshiro")
 
                 path = joinpath(config.output, "$engine-$pass.tsv")
                 cmd = `$(Base.julia_cmd()) --startup-file=no --threads=2 --gcthreads=1 --project=$(dirname(project)) $(joinpath(@__DIR__, "first_use.jl")) $engine`
