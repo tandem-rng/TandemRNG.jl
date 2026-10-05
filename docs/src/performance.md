@@ -85,6 +85,19 @@ The same fills through `Stateful` on 14 threads:
 | Float32 | 109 | 37.2 | 42.5 |
 | UInt32 | 127 | | |
 
+Scalar chains of 1024 Float64 draws, which span two complete K = 32 groups and so include
+the reseeding, one task, three passes with alternating generator order, GiB/s at 8 bytes per
+draw, `compare_cpu` in `benchmark/benchmarks.jl`. Tandem chains `rand_next`, natively and
+through the PureRNGs bridge.
+
+| generator | chain, GiB/s |
+|---|---|
+| Tandem native | 4.44–5.85 |
+| Tandem bridge | 5.48–5.85 |
+| Random123 Philox4x32 | 1.42–1.51 |
+| Random123 Philox4x64 | 2.48–2.52 |
+| Xoshiro | 8.60–8.64 |
+
 Float64 normals are the ziggurat: a table pass over each group of UInt64 draws, three draws
 per test. The 0.43 % of draws that miss queue across groups and resolve eight at a time on
 fallbacks seeded eight wide, as in tandem-c. Float32 normals and the
@@ -92,16 +105,16 @@ exponentials run tandem-c's polynomials, vectorized two doubles or four floats w
 interleaved iterations. Every float fill converts the words in the row loop before the store.
 
 Tandem on AMD EPYC 7702P (AVX2), Julia 1.13, 2026-09-26. One task, 2^20 elements,
-three BenchmarkTools passes with alternating generator order. Scalar chains include
-at least two complete reseeding periods. Every case below allocates zero bytes.
+three BenchmarkTools passes with alternating generator order. Every case below allocates
+zero bytes.
 
-| generator | chain, ns/draw | Float64 fill, GiB/s | Float32 fill, GiB/s | UInt32 fill, GiB/s |
-|---|---|---|---|---|
-| Tandem native | 2.49–2.50 | 7.65–7.66 | 10.70–10.72 | 14.75–14.76 |
-| Tandem bridge | 2.48–2.50 | 7.65–7.66 | 10.70–10.71 | 14.75–14.76 |
-| Random123 Philox4x32 | 10.50–10.52 | 0.77–0.77 | 0.68–0.68 | 0.72–0.72 |
-| Random123 Philox4x64 | 7.10–7.13 | 1.40–1.40 | 0.71–0.71 | 0.76–0.78 |
-| Xoshiro | 1.29–1.29 | 6.41–6.41 | 14.23–14.23 | 16.61–16.62 |
+| generator | Float64 fill, GiB/s | Float32 fill, GiB/s | UInt32 fill, GiB/s |
+|---|---|---|---|
+| Tandem native | 7.65–7.66 | 10.70–10.72 | 14.75–14.76 |
+| Tandem bridge | 7.65–7.66 | 10.70–10.71 | 14.75–14.76 |
+| Random123 Philox4x32 | 0.77–0.77 | 0.68–0.68 | 0.72–0.72 |
+| Random123 Philox4x64 | 1.40–1.40 | 0.71–0.71 | 0.76–0.78 |
+| Xoshiro | 6.41–6.41 | 14.23–14.23 | 16.61–16.62 |
 
 Random123 1.7.1 supplies 23/52 random bits for these Float32/Float64 APIs; the other
 generators supply 24/53. This table predates the Float32 fill through the full-group loop.
