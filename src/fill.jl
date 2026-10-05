@@ -235,6 +235,14 @@ end
     p0::UInt64,
 ) where {T,N} = _write_dense_row!(A, o, prow, p0)
 
+# The Float64 normal fill writes its raw draws into the destination's own storage.
+@inline _write_row!(
+    A::Base.ReinterpretArray{UInt64,N,Float64,<:Array},
+    o::Row,
+    prow::UInt64,
+    p0::UInt64,
+) where {N} = _write_dense_row!(A, o, prow, p0)
+
 @inline function _write_dense_row!(
     A::AbstractArray{T},
     o::Row,

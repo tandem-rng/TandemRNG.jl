@@ -18,15 +18,15 @@ function scalar_draws(f, rng, count)
 end
 
 @testset "fixture files" begin
-    # Byte identical to tandem-c b049384 (cross_below.h, cross_normal.h,
-    # cross_exponential.h) and tandem-cuda c5c5725 (cross_fill_below.h,
+    # Byte identical to tandem-c b049384 (cross_below.h, cross_exponential.h), tandem-c
+    # 121db59 (cross_normal.h) and tandem-cuda c5c5725 (cross_fill_below.h,
     # cross_fill_exponential.h).
     @test fixture_sha256("cross_below.h") ==
           "0119fa58cc98d2da41d140408aaab57264166c73dc5ab22c1b0b725e282ae8f1"
     @test fixture_sha256("cross_fill_below.h") ==
           "d6d7a9dfcb42d02746e58ff99325c07fd4280f88fa59fcd780a200f65f8814bc"
     @test fixture_sha256("cross_normal.h") ==
-          "e313b2f1cda2301f8c67cfae952219d4898df9a0623372965c39f6bb0edc7003"
+          "3cd7c8f9178711255718288eb712eaccb33a1726d2a185f412f13590398ad3ac"
     @test fixture_sha256("cross_exponential.h") ==
           "da848bae24dae7d1cde6fdb7ef2e6d2953b76b333ba5139800cba3ae03c85efc"
     @test fixture_sha256("cross_fill_exponential.h") ==
@@ -117,42 +117,94 @@ end
     rng = after_bool(5)
     @test rand_below_fill!(rng, UInt32[], UInt32(10)) == rng
     @test rand_fill!(rng, Int[], 1:10) == rng
-    @test normal_fill!(rng, Float64[]) == rng
+    @test normal_fill!(rng, Float32[]) == rng
     @test exponential_fill!(rng, Float32[]) == rng
+    # Appendix A: an empty Float64 normal fill aligns the position to 64 bits.
+    @test rngposition(normal_fill!(rng, Float64[])) == 64
     # A full-width range takes the plain fill, which would align the position.
     st = Stateful(rng)
     rand!(st, Int32[], typemin(Int32):typemax(Int32))
     @test Tandem8x32(st) == rng
 end
 
-@testset "normals: pairs equal tandem-c bit for bit" begin
+@testset "normals equal tandem-c bit for bit" begin
     text = fixture_text("cross_normal.h")
-    for (T, name) in ((Float64, "CROSS_NORMAL"), (Float32, "CROSS_NORMALF"))
-        want = parse.(T, c_initializer(text, name))
-        got, rng = scalar_draws(after_bool(42), length(want) ÷ 2) do r
-            pair = Vector{T}(undef, 2)
-            return pair, normal_fill!(r, pair)
-        end
-        @test reduce(vcat, got) == want
-        @test rngposition(rng) == parse(UInt64, c_scalar(text, name * "_END_POS"))
+    # Float64 ziggurat fills of the key of seed 42. The rows start unaligned, and element 20 of
+    # the last rows is a wedge accept, a wedge reject and a tail. Scalar draws equal the fills.
+    key = rngkey(Tandem8x32(42))
+    for row in c_initializer(text, "CROSS_NORMAL")
+        rng = Tandem8x32(key, parse(Int, row[1]))
+        want = parse.(Float64, row[2])
+        A = Vector{Float64}(undef, length(want))
+        @test rngposition(normal_fill!(rng, A)) == parse(UInt64, row[3])
+        @test A == want
+        got, next = scalar_draws(r -> normal_next(r, Float64), rng, length(want))
+        @test got == want
+        @test rngposition(next) == parse(UInt64, row[3])
     end
+    # Float32 Box-Muller pairs after one Bool draw.
+    want = parse.(Float32, c_initializer(text, "CROSS_NORMALF"))
+    got, rng = scalar_draws(after_bool(42), length(want) ÷ 2) do r
+        pair = Vector{Float32}(undef, 2)
+        return pair, normal_fill!(r, pair)
+    end
+    @test reduce(vcat, got) == want
+    @test rngposition(rng) == parse(UInt64, c_scalar(text, "CROSS_NORMALF_END_POS"))
 end
 
-@testset "normals: 1e6-pair dump equals tandem-c bit for bit" begin
-    # tandem-c tools/dump_normals.c: seed (2026, 7), 2e6 − 1 f64 then 2e6 − 1 f32 normals from
-    # one generator at each start.
+fnv1a(h, bytes) = foldl((h, b) -> (h ⊻ b) * 0x00000100000001b3, bytes; init = h)
+const FNV_BASIS = 0xcbf29ce484222325
+
+@testset "normals: hashes equal tandem-c's test_normal_bits.c" begin
+    # tools/dump_normals.c: 1e6 Float64 normals of seed (2026, 7) at each start.
+    starts = (0, 1, 77, 12345, 1 << 30)
+    key = rngkey(Tandem8x32(2026 + UInt128(7) << 64))
     ctx = SHA.SHA256_CTX()
-    d = Vector{Float64}(undef, 1_999_999)
-    f = Vector{Float32}(undef, 1_999_999)
-    for start in (0, 1, 77, 12345, 1 << 30)
-        rng = Tandem8x32(rngkey(Tandem8x32(2026 + UInt128(7) << 64)), start)
-        rng = normal_fill!(rng, d)
+    d = Vector{Float64}(undef, 1_000_000)
+    h = FNV_BASIS
+    for start in starts
+        normal_fill!(Tandem8x32(key, start), d)
         SHA.update!(ctx, reinterpret(UInt8, d))
-        normal_fill!(rng, f)
-        SHA.update!(ctx, reinterpret(UInt8, f))
+        h = fnv1a(h, reinterpret(UInt8, d))
     end
     @test bytes2hex(SHA.digest!(ctx)) ==
-          "cfae418807a7d5f91ecd3e42c33a00943690c6e4b888ee39206738783efe9ded"
+          "700ec4d2f4d6b82aaa56c6eff18a4e5919585fdbd093988773383d580ea610d1"
+    @test h == 0xa61cfa844c85f7c1
+    # The spec's Python implementation of Appendix A: key {1, 2, 3, 4}, K = 32.
+    d = Vector{Float64}(undef, 200_000)
+    for (start, want, stop) in ((0, 0x0c4059ed409d578d, 12_800_000), (2373, 0x30ce40c86b295193, 12_802_432))
+        rng = normal_fill!(Tandem8x32{32}((0x00000001, 0x00000002, 0x00000003, 0x00000004), start), d)
+        @test fnv1a(FNV_BASIS, reinterpret(UInt8, d)) == want
+        @test rngposition(rng) == stop
+    end
+    # 2e6 − 1 Float32 normals at each start.
+    f = Vector{Float32}(undef, 1_999_999)
+    h = FNV_BASIS
+    for start in starts
+        normal_fill!(Tandem8x32(key, start), f)
+        h = fnv1a(h, reinterpret(UInt8, f))
+    end
+    @test h == 0xaa1ea656ce73a4fb
+end
+
+@testset "Float64 normals: one draw per element, fills cut anywhere equal the whole" begin
+    # 3000 draws hold about 13 misses, so the cuts split the fallbacks of a whole fill.
+    for K in (1, 32)
+        rng = Tandem8x32{K}(rngkey(Tandem8x32(8)), 1)
+        whole = Vector{Float64}(undef, 3000)
+        @test rngposition(normal_fill!(rng, whole)) == 64 + 64 * 3000
+        got, _ = scalar_draws(r -> normal_next(r, Float64), rng, 3000)
+        @test got == whole
+        for cut in (1, 7, 16, 1000, 2999)
+            head = Vector{Float64}(undef, cut)
+            tail = Vector{Float64}(undef, 3000 - cut)
+            normal_fill!(rng, head)
+            normal_fill!(Tandem8x32{K}(rngkey(rng), 64 + 64 * cut), tail)
+            @test vcat(head, tail) == whole
+        end
+        @test normal_fill!(rng, similar(whole); nthreads = 3) == normal_fill!(rng, whole; nthreads = 1)
+        @test whole == (A = similar(whole); normal_fill!(rng, A; nthreads = 3); A)
+    end
 end
 
 @testset "exponentials equal tandem-c bit for bit" begin
@@ -194,20 +246,25 @@ end
           "5c035a4ef1368231d25a9c2f9201be2df3224e28a14549a50625d0db3770ef4e"
 end
 
-@testset "normals and exponentials: draw consumption and decomposition" begin
+@testset "Float32 normals and exponentials: draw consumption and decomposition" begin
     for T in (Float32, Float64), K in (1, 32)
         w = 8 * sizeof(T)
         rng = Tandem8x32{K}(rngkey(Tandem8x32(8)), 1)
-        # An odd fill writes the cosine half of its last pair and consumes both uniforms.
-        odd = Vector{T}(undef, 2001)
-        even = Vector{T}(undef, 2002)
-        @test rngposition(normal_fill!(rng, odd)) == rngposition(normal_fill!(rng, even))
-        @test odd == even[1:end-1]
-        @test normal_next(rng, T) == (even[1], rand_next(rand_next(rng, T)[2], T)[2])
-        # A range that starts at an even element is the matching part of the whole fill.
-        part = Vector{T}(undef, 1000)
-        normal_fill!(Tandem8x32{K}(rngkey(rng), w + w * 1000), part)
-        @test part == even[1001:2000]
+        if T === Float32
+            # An odd fill writes the cosine half of its last pair and consumes both uniforms.
+            odd = Vector{T}(undef, 2001)
+            even = Vector{T}(undef, 2002)
+            @test rngposition(normal_fill!(rng, odd)) == rngposition(normal_fill!(rng, even))
+            @test odd == even[1:end-1]
+            @test normal_next(rng, T) == (even[1], rand_next(rand_next(rng, T)[2], T)[2])
+            # A range that starts at an even element is the matching part of the whole fill.
+            part = Vector{T}(undef, 1000)
+            normal_fill!(Tandem8x32{K}(rngkey(rng), w + w * 1000), part)
+            @test part == even[1001:2000]
+            # Threads split the fill without changing the values.
+            @test normal_fill!(rng, similar(even); nthreads = 3) == normal_fill!(rng, even; nthreads = 1)
+            @test even == (A = similar(even); normal_fill!(rng, A; nthreads = 3); A)
+        end
         # One uniform per exponential.
         e = Vector{T}(undef, 2001)
         @test rngposition(exponential_fill!(rng, e)) == rngposition(rand_fill!(rng, similar(e)))
@@ -220,13 +277,10 @@ end
             exponential_fill!(Tandem8x32{K}(rngkey(rng), w + w * cut), tail)
             @test vcat(head, tail) == e
         end
-        # Threads split the fill without changing the values.
-        @test normal_fill!(rng, similar(even); nthreads = 3) == normal_fill!(rng, even; nthreads = 1)
-        @test even == (A = similar(even); normal_fill!(rng, A; nthreads = 3); A)
     end
 end
 
-@testset "normals and exponentials: accuracy within Appendix A tolerances" begin
+@testset "exponentials and Float32 normals: accuracy within Appendix A tolerances" begin
     # Each value against the formula in BigFloat on the same uniforms.
     tolerance(::Type{Float64}, z) = 1e-12 * abs(z) + 1e-15
     tolerance(::Type{Float32}, z) = 16 * eps(Float32(abs(z))) + 1e-6
@@ -237,6 +291,7 @@ end
         z = similar(u)
         exponential_fill!(rng, z)
         @test all(abs(z[i] + log1p(-big(u[i]))) <= tolerance(T, z[i]) for i in eachindex(u))
+        T === Float32 || continue
         normal_fill!(rng, z)
         reference = map(1:2:length(u)) do i
             r = sqrt(-2 * log1p(-big(u[i])))

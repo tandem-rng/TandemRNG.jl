@@ -1,7 +1,8 @@
 # Bounded integers, normals, and exponentials derived from the uniform stream. Appendix A of
 # the specification fixes them so that every port returns the same values: the bounded
 # draws and their fallback keys are exact, and the normals and exponentials copy the C
-# reference's polynomials and fused multiply-adds, so they are bit for bit equal to tandem-c.
+# reference's polynomials, fused multiply-adds and ziggurat tables, so they are bit for bit
+# equal to tandem-c.
 
 # --- bounded integers ------------------------------------------------------------------------
 
@@ -229,28 +230,9 @@ end
     return reinterpret(T, xb), reinterpret(T, yb)
 end
 
-# Box-Muller from uniforms a and b: r = sqrt(-2 ln(1 - a)) and (r cos 2πb, r sin 2πb). The
-# nearest quarter turn q leaves b − q/4 exact, so the angle in [−π/4, π/4] needs no further
+# Float32 Box-Muller from uniforms a and b: r = sqrt(-2 ln(1 - a)) and (r cos 2πb, r sin 2πb).
+# The nearest quarter turn q leaves b − q/4 exact, so the angle in [−π/4, π/4] needs no further
 # reduction, and short polynomials give cos and sin there.
-@inline function _box_muller(a::Float64, b::Float64)
-    r = _sqrt(_neg2_log(1.0 - a))
-    q = unsafe_trunc(Int64, b * 4.0 + 0.5)
-    th = fma(-Float64(q), 0.25, b) * 6.283185307179586
-    w = th * th
-    hs = fma(w, 1.5914650986900946e-10, -2.5051097984389413e-8)
-    hs = fma(w, hs, 2.755731600073921e-6)
-    hs = fma(w, hs, -0.00019841269836630226)
-    hs = fma(w, hs, 0.008333333333330813)
-    hs = fma(w, hs, -0.16666666666666669)
-    hc = fma(w, 2.0665708703855164e-9, -2.7555858522576447e-7)
-    hc = fma(w, hc, 2.480158263811954e-5)
-    hc = fma(w, hc, -0.0013888888882156126)
-    hc = fma(w, hc, 0.04166666666663108)
-    hc = fma(w, hc, -0.4999999999999997)
-    c, s = _quarter_turn(fma(w, hc, 1.0), th * fma(w, hs, 1.0), q)
-    return r * c, r * s
-end
-
 @inline function _box_muller(a::Float32, b::Float32)
     r = _sqrt(_neg2_log(1.0f0 - a))
     q = unsafe_trunc(Int32, b * 4.0f0 + 0.5f0)
@@ -269,18 +251,86 @@ end
 
 const NormalTypes = Union{Float32,Float64}
 
+# Float64 normals are the 1024-layer ziggurat of Appendix A, one UInt64 draw per element. A
+# draw that misses the inner rectangles continues on its own fallback generator, split(g) of
+# purpose(NORMAL_PURPOSE_64) of the key at position 0, where g is the global index of the
+# draw. So element i depends on draw i alone, and a fill cut anywhere equals the whole fill.
+const NORMAL_PURPOSE_64 = UInt64(0x4e524d3634)
+
+@inline _normal_sub(key::O4) = _child_key(key, NORMAL_PURPOSE_64, DOMAIN_FOLD, UInt32(0), 0)
+
+# (±ra·W[i], ra < K[i]): the candidate of a draw and whether it lies in the inner rectangle.
+# ZIG_W holds −W[i] at 1024 + i, so bit 10 picks the sign by the index. ra < 2^53 converts
+# exactly.
+@inline function _zig_candidate(r::UInt64)
+    ra = r >> 11
+    x = Float64(ra % Int64) * @inbounds(ZIG_W[(r&0x7ff)+1])
+    return x, ra < @inbounds(ZIG_K[(r&0x3ff)+1])
+end
+
+# Draw d of a fallback generator from position 0. Draws 2j and 2j + 1 share block j of the
+# stream, so each pair costs one `_block_at` instead of a row of eight.
+@inline function _fallback_next(key::O4, blk::O4, d::Int, ::Val{K}) where {K}
+    if iseven(d) && d >= 2
+        blk = _block_at(key, UInt64(64d), K)
+    end
+    lo, hi = isodd(d) ? (blk[3], blk[4]) : (blk[1], blk[2])
+    return UInt64(lo) | UInt64(hi) << 32, blk, d + 1
+end
+
+@inline _unit(d::UInt64) = Float64(d >> 11) * 0x1p-53
+
+# The slow path of a draw r that missed, whose global draw index is g, on the fallback
+# split(g) of `sub`. ln is −0.5·_neg2_log, exact given _neg2_log. Julia does not contract a
+# product into a sum, so every other operation rounds once, as the appendix requires. A fill
+# maps one group of draws at a time, about two misses for K = 32, so seeding the fallbacks
+# eight at a time on the row lanes, as tandem-c does, measured slower here.
+@noinline function _zig_miss(sub::O4, ::Val{K}, r::UInt64, g::UInt64) where {K}
+    key = _child_key(sub, g >> 1, DOMAIN_SPLIT, UInt32(0), g & 1)
+    blk = _block_at(key, UInt64(0), K)
+    d = 0
+    while true
+        i = (r & 0x3ff) % Int
+        x, inner = _zig_candidate(r)
+        inner && return x
+        if i == 0
+            # The tail beyond R, by Marsaglia's method.
+            while true
+                u, blk, d = _fallback_next(key, blk, d, Val(K))
+                a = 0.5 * _neg2_log(1.0 - _unit(u)) / ZIG_R
+                u, blk, d = _fallback_next(key, blk, d, Val(K))
+                b = 0.5 * _neg2_log(1.0 - _unit(u))
+                b + b >= a * a && return isodd(r >> 10) ? -(ZIG_R + a) : ZIG_R + a
+            end
+        end
+        u, blk, d = _fallback_next(key, blk, d, Val(K))
+        y = @inbounds ZIG_Y[i+1] + _unit(u) * (ZIG_Y[i+2] - ZIG_Y[i+1])
+        -0.5 * _neg2_log(y) < -0.5 * (x * x) && return x
+        r, blk, d = _fallback_next(key, blk, d, Val(K))
+    end
+end
+
 """
     normal_next(rng, T = Float64) -> (z, rng′)
 
-A standard normal of type `Float32` or `Float64` by Box-Muller (Appendix A of the
-specification). It consumes two uniform draws `a` and `b` of type `T` and returns
-`sqrt(-2 log(1 - a)) cos(2πb)`, element 1 of [`normal_fill!`](@ref). Float32 normals are
-computed in Float32. The values equal tandem-c's `tandem_normal_f64` and
-`tandem_normal_f32` bit for bit.
+A standard normal of type `Float32` or `Float64` (Appendix A of the specification), element 1
+of [`normal_fill!`](@ref). A Float64 normal is the 1024-layer ziggurat of one UInt64 draw. A
+Float32 normal is the cosine half `sqrt(-2 log(1 - a)) cos(2πb)` of the Box-Muller pair of two
+Float32 draws `a` and `b`, computed in Float32. The values equal tandem-c's
+`tandem_normal_f64` and `tandem_normal_f32` bit for bit.
 """
-@inline function normal_next(rng::Tandem8x32, ::Type{T} = Float64) where {T<:NormalTypes}
-    a, rng = rand_next(rng, T)
-    b, rng = rand_next(rng, T)
+normal_next(rng::Tandem8x32) = normal_next(rng, Float64)
+
+@inline function normal_next(rng::Tandem8x32{K}, ::Type{Float64}) where {K}
+    g = _align_up(rng.pos, 64) >> 6
+    r, rng = rand_next(rng, UInt64)
+    x, inner = _zig_candidate(r)
+    return (inner ? x : _zig_miss(_normal_sub(rng.key), Val(K), r, g)), rng
+end
+
+@inline function normal_next(rng::Tandem8x32, ::Type{Float32})
+    a, rng = rand_next(rng, Float32)
+    b, rng = rand_next(rng, Float32)
     return _box_muller(a, b)[1], rng
 end
 
@@ -379,22 +429,55 @@ end
     return nothing
 end
 
+# Map the raw draws R[i:j] to normals in A[i:j]. R shares A's storage.
+@inline function _zig_map!(A, R, i::Int, j::Int, sub::O4, g0::UInt64, ::Val{K}) where {K}
+    @inbounds for k = i:j
+        r = R[k]
+        x, inner = _zig_candidate(r)
+        A[k] = inner ? x : _zig_miss(sub, Val(K), r, g0 + UInt64(k - 1))
+    end
+    return nothing
+end
+
 """
     normal_fill!(rng, A::AbstractArray{T}; nthreads = Threads.nthreads()) -> rng′
 
-Fill `A` with standard normals by Box-Muller (Appendix A of the specification). Elements
-`2j − 1` and `2j` are the cosine and sine halves from uniform draws `2j − 1` and `2j` of
-`rand_fill!(rng, A)`. The fill consumes `2·cld(n, 2)` uniforms: an odd `n` writes only the
-cosine half of its last pair. An empty fill leaves the position unchanged. The values
-equal tandem-c's `tandem_fill_normal_f64` and `tandem_fill_normal_f32` bit for bit. `T` is
-`Float32` or `Float64`. Threads split the fill as in `rand_fill!` without changing the
-values.
+Fill `A` with standard normals (Appendix A of the specification). `T` is `Float32` or
+`Float64`. The values equal tandem-c's `tandem_fill_normal_f64` and `tandem_fill_normal_f32`
+bit for bit. Threads split the fill as in `rand_fill!` without changing the values.
+
+- Float64: element `i` is the 1024-layer ziggurat of UInt64 draw `i`, and the fill consumes
+  `n` draws. A draw that misses the inner rectangles continues on its own fallback generator,
+  keyed by the draw's index in the stream, so a fill cut at any element equals the whole
+  fill. An empty fill aligns the position to 64 bits.
+- Float32: elements `2j − 1` and `2j` are the cosine and sine halves of the Box-Muller pair of
+  uniform draws `2j − 1` and `2j` of `rand_fill!(rng, A)`. The fill consumes `2·cld(n, 2)`
+  uniforms: an odd `n` writes only the cosine half of its last pair. An empty fill leaves
+  the position unchanged.
 """
+function normal_fill!(
+    rng::Tandem8x32{K},
+    A::AbstractArray{Float64};
+    nthreads::Integer = Threads.nthreads(),
+) where {K}
+    _check_cpu_fill(rng, A)
+    n = length(A)
+    p0 = _align_up(rng.pos, 64)
+    _check_span(p0, rng.pos, 64, n)
+    n == 0 && return _advance(rng, p0)
+    sub, g0 = _normal_sub(rng.key), p0 >> 6
+    R = reinterpret(UInt64, A)
+    _fill_then_map!(R, rng.key, p0, n, 1, nthreads, Val(K)) do R, i, j
+        _zig_map!(A, R, i, j, sub, g0, Val(K))
+    end
+    return _advance(rng, p0 + UInt64(64) * UInt64(n))
+end
+
 function normal_fill!(
     rng::Tandem8x32{K},
     A::AbstractArray{T};
     nthreads::Integer = Threads.nthreads(),
-) where {K,T<:NormalTypes}
+) where {K,T<:Float32}
     _check_cpu_fill(rng, A)
     n = length(A)
     n == 0 && return rng

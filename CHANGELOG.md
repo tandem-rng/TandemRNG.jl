@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Float64 normals are the 1024-layer ziggurat of Appendix A, one UInt64 draw per element,
+  bit identical to tandem-c. This changes every Float64 normal value and the positions
+  after Float64 normal draws. An empty Float64 normal fill aligns the position to 64 bits.
+  Float32 normals are unchanged.
 - GPU PureRNGs fills reuse recurrence state across shared-memory tiles for long
   chunks. Small fills and the default chunk length retain their existing path.
 - CUDA Dirichlet batches stage small columns in shared memory for coalesced

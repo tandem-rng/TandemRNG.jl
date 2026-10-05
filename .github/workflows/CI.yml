@@ -61,3 +61,15 @@ jobs:
           files: lcov.info
           disable_search: true
           fail_ci_if_error: true
+  zig-tables:
+    name: ziggurat tables are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - run: |
+          git clone --depth 1 https://github.com/tandem-rng/spec ../tandem-spec
+          julia --startup-file=no tools/gen_zig_tables.jl ../tandem-spec/tables/normal_f64_zig1024.json > src/zig_tables.jl
+          git diff --exit-code src/zig_tables.jl

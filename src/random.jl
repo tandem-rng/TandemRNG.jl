@@ -170,12 +170,20 @@ function Random.rand!(r::Stateful, A::AbstractArray, sp::_BoundedSampler)
     return A
 end
 
+@inline function Random.randn(r::Stateful{K}, ::Type{Float64}) where {K}
+    g = _align_up(r.pos, 64) >> 6
+    x = _draw!(r, UInt64)
+    z, inner = _zig_candidate(x)
+    return inner ? z : _zig_miss(_normal_sub(r.value.key), Val(K), x, g)
+end
+
+@inline function Random.randn(r::Stateful, ::Type{Float32})
+    a = _draw!(r, Float32)
+    return _box_muller(a, _draw!(r, Float32))[1]
+end
+
 for T in (Float32, Float64)
     @eval begin
-        @inline function Random.randn(r::Stateful, ::Type{$T})
-            a = _draw!(r, $T)
-            return _box_muller(a, _draw!(r, $T))[1]
-        end
         @inline Random.randexp(r::Stateful, ::Type{$T}) = _exponential(_draw!(r, $T))
         function Random.randn!(r::Stateful, A::AbstractArray{$T})
             _adopt!(r, normal_fill!(Tandem8x32(r), A))
