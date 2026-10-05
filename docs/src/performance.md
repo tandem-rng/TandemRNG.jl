@@ -80,8 +80,8 @@ The one-task rows call the immutable fills with `nthreads = 1`.
 
 | | `rand!` Float64 | `randn!` Float64 | `randn!` Float32 |
 |---|---|---|---|
-| Tandem `Stateful`, 14 tasks | 87.3 | 33.1 | 33.2 |
-| Tandem, one task | 17.4 | 4.81 | 5.45 |
+| Tandem `Stateful`, 14 tasks | 87.3 | 40.6 | 33.2 |
+| Tandem, one task | 17.4 | 6.24 | 5.45 |
 | Julia `Xoshiro`, one task | 20.2 | 7.17 | 1.26 |
 
 | | `randexp!` Float64 | `randexp!` Float32 |
@@ -90,10 +90,12 @@ The one-task rows call the immutable fills with `nthreads = 1`.
 | Tandem, one task | 6.02 | 6.49 |
 | `Random.default_rng()`, one task | 6.39 | 1.15 |
 
-The normals and exponentials run tandem-c's polynomials, vectorized two doubles or four
-floats wide with four interleaved iterations. Julia's ziggurats are faster for one Float64
-task. On the same machine tandem-c reaches 5.0 and 5.5 GiB/s for the one-task normal
-fills and 6.1 and 6.7 for the exponential fills.
+The Float64 normal cells are from 2026-10-05, after the move to the ziggurat. A Float64 normal
+fill maps each group of UInt64 draws by a table pass, and the 0.43 % of draws that miss seed
+their fallback one at a time. The Float32 normals and the exponentials run tandem-c's
+polynomials, vectorized two doubles or four floats wide with four interleaved iterations.
+Julia's ziggurat is faster for one Float64 task. On the same machine tandem-c reaches 7.7 and
+5.5 GiB/s for the one-task normal fills and 6.1 and 6.7 for the exponential fills.
 
 ### GPU
 

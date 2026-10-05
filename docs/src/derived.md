@@ -43,8 +43,26 @@ after one draw. Immutable range draws reject ranges of more than 2^64 values.
 
 ## Normals
 
-[`normal_next`](@ref) and [`normal_fill!`](@ref) use the Box-Muller transform on two
-uniform draws `a` and `b` of the output type:
+### Float64: ziggurat
+
+Float64 normals use the 1024-layer ziggurat of Appendix A, one UInt64 draw per element.
+
+- Element `i` of a fill comes from UInt64 draw `i`, and a fill of `n` elements consumes `n`
+  draws. A scalar draw consumes one draw and equals element 1 of a fill. An empty fill
+  aligns the position to 64 bits.
+- 99.57 % of the draws land in an inner rectangle and cost a table lookup and a multiply.
+- A draw that misses continues on its own fallback generator: `splitrng` index `g` of
+  `subrng` purpose `0x4e524d3634` of the key at position 0, where `g` is the draw's index in
+  the stream. So a fill cut at any element equals the whole fill, and threads and workers
+  may start anywhere.
+- The tables come from the spec's `tables/normal_f64_zig1024.json`. `tools/gen_zig_tables.jl`
+  writes them into `src/zig_tables.jl` after it checks the file's SHA-256, and CI checks the
+  generated file is current. The logarithm is tandem-c's polynomial, so the values are exact
+  across ports.
+
+### Float32: Box-Muller
+
+Float32 normals use the Box-Muller transform on two Float32 uniform draws `a` and `b`:
 
 ```
 r  = sqrt(−2 log(1 − a))
@@ -54,15 +72,15 @@ z₁ = r sin(2π b)
 
 - Fill elements `2j − 1` and `2j` are `z₀` and `z₁` of uniform draws `2j − 1` and `2j`.
 - A fill of `n` elements consumes `2·cld(n, 2)` uniforms. An odd `n` writes only `z₀` of
-  its last pair.
+  its last pair. An empty fill leaves the position unchanged.
 - A scalar draw returns `z₀` and consumes two uniforms, so it equals element 1 of a fill.
-  `randn(st)` on `Stateful` does the same and keeps no `z₁`.
-- Float32 normals are computed in Float32 from Float32 uniforms.
+  `randn(st, Float32)` on `Stateful` does the same and keeps no `z₁`.
+- They are computed in Float32.
 - `log`, `cos`, and `sin` are tandem-c's short polynomials with explicit fused
   multiply-adds and no library call. Julia does not contract other products into sums,
   so the bits match on every CPU.
 
-To split a normal fill across workers, start each range at an odd element (an even
+To split a Float32 normal fill across workers, start each range at an odd element (an even
 offset), so that the pairs fall the same way. Only the last range may have odd length.
 
 ## Exponentials
@@ -85,4 +103,7 @@ PureRNGs distribution draws do not follow Appendix A.
 `test/derived.jl` checks the values against copies of tandem-c's `cross_below.h`,
 `cross_normal.h`, and `cross_exponential.h`, tandem-cuda's `cross_fill_below.h` and
 `cross_fill_exponential.h`, and the SHA-256 of tandem-c's 1e6-element normal and
-exponential dumps. Exponentials also pass moment and Kolmogorov-Smirnov tests on 1e7 draws.
+exponential dumps. The `cross_normal.h` rows put a wedge accept, a wedge reject and a tail
+at unaligned starts. The normals also match the FNV-1a hashes of tandem-c's
+`test_normal_bits.c`, including the spec's Python implementation of Appendix A. Normals and
+exponentials pass moment and Kolmogorov-Smirnov tests on 1e7 draws.
