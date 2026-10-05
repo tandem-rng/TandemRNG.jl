@@ -35,10 +35,10 @@ julia --startup-file=no --threads=8 --project=benchmark benchmark/run.jl cpu res
 ```
 
 Each timing follows construction, allocation, first touch, and compilation.
-Passes alternate generator order. The report includes minima, medians, allocation
-bytes, allocation counts, and sample counts. Scalar chains cover all 18 supported
-types, with at least 1,024 draws and two complete K32 groups. The report records the
-draw count for each type. The reported scalar time is per draw.
+Passes alternate generator order. The report gives GiB/s of the best and the median
+sample, allocation bytes, allocation counts, and sample counts. Scalar chains cover all
+18 supported types, with at least 1,024 draws and two complete K32 groups. The report
+records the draw count for each type. A chain's rate counts `sizeof(T)` bytes per draw.
 Fills compare Float64, Float32, UInt32, and Bool. Throughput counts destination bytes,
 including one byte per Bool. All scalar types include signed integers, complex floats,
 and Char. The checksum includes every draw.

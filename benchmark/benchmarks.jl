@@ -145,10 +145,10 @@ function cpu_cases(seed)
     )
 end
 
-function cpu_record(io, pass, operation, T, n, name, trial; bytes = 0)
+# `bytes` per timed call: the destination for a fill, sizeof(T) per draw for a chain.
+function cpu_record(io, pass, operation, T, n, name, trial; bytes)
     best, middle = minimum(trial), median(trial)
-    scale = operation == "scalar_chain" ? n : 1
-    rate = bytes == 0 ? "" : bytes / 2.0^30 / (best.time / 1e9)
+    gibs(t) = bytes / 2.0^30 / (t.time / 1e9)
     println(
         io,
         join(
@@ -158,9 +158,8 @@ function cpu_record(io, pass, operation, T, n, name, trial; bytes = 0)
                 T,
                 n,
                 name,
-                best.time / scale,
-                middle.time / scale,
-                rate,
+                gibs(best),
+                gibs(middle),
                 best.memory,
                 best.allocs,
                 length(trial),
@@ -194,7 +193,7 @@ function compare_cpu(
     )
     println(
         io,
-        "pass\toperation\ttype\telements\tgenerator\tmin_ns\tmedian_ns\tGiB_s\tallocated_bytes\tallocations\tsamples",
+        "pass\toperation\ttype\telements\tgenerator\tbest_GiB_s\tmedian_GiB_s\tallocated_bytes\tallocations\tsamples",
     )
     for T in (Float64, Float32, UInt32, Bool), n in sizes
         A = Vector{T}(undef, n)
@@ -262,7 +261,7 @@ function compare_cpu(
         for pass = 1:passes, (name, rng, chain) in (isodd(pass) ? chains : reverse(chains))
             trial = @benchmark typed_chain($chain, $rng, $(Val(T)), $n) evals = 10 samples =
                 samples seconds = seconds
-            cpu_record(io, pass, "scalar_chain", T, n, name, trial)
+            cpu_record(io, pass, "scalar_chain", T, n, name, trial; bytes = n * sizeof(T))
         end
     end
     return nothing
