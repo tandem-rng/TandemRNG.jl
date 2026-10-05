@@ -89,6 +89,13 @@ offset), so that the pairs fall the same way. Only the last range may have odd l
 uniform draw `u` of the output type, with the polynomial `log` of the normals. A fill
 consumes one uniform per element, and element 1 equals the scalar draw.
 
+## Weighted choice
+
+[`ChoiceTable`](@ref) builds Walker's alias table of Appendix C from the weights in exact
+integers, so the table equals tandem-c's. [`choice_next`](@ref) and [`choice_fill!`](@ref)
+draw one-based indices, one UInt64 draw per element, and an empty fill aligns the position
+to 64 bits. `Stateful` gives the same values through `rand(st, t)` and `rand!(st, A, t)`.
+
 ## Threads and devices
 
 Normal and exponential fills split their groups over `nthreads` tasks as `rand_fill!`
@@ -106,4 +113,6 @@ PureRNGs distribution draws do not follow Appendix A.
 exponential dumps. The `cross_normal.h` rows put a wedge accept, a wedge reject and a tail
 at unaligned starts. The normals also match the FNV-1a hashes of tandem-c's
 `test_normal_bits.c`, including the spec's Python implementation of Appendix A. Normals and
-exponentials pass moment and Kolmogorov-Smirnov tests on 1e7 draws.
+exponentials pass moment and Kolmogorov-Smirnov tests on 1e7 draws. `test/choice.jl`
+checks the weighted choice tables and indices against a copy of the spec's
+`conformance/choice.json`, plus a chi-square test on 1e6 draws.

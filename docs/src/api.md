@@ -33,6 +33,9 @@ normal_next
 normal_fill!
 exponential_next
 exponential_fill!
+ChoiceTable
+choice_next
+choice_fill!
 ```
 
 ## Child streams

@@ -175,7 +175,7 @@ end
 @inline function _check_cpu_fill(rng::Tandem8x32, A::AbstractArray)
     _check_fill_device(rng, A)
     rng.device isa _CPUBackend ||
-        throw(ArgumentError("bounded, normal, and exponential fills run on the CPU"))
+        throw(ArgumentError("derived fills run on the CPU"))
     Base.require_one_based_indexing(A)
     return nothing
 end

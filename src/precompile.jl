@@ -67,6 +67,9 @@
             rand_below_next(rng, U(10))
             rand_below_fill!(rng, Vector{U}(undef, 17), U(10))
         end
+        table = ChoiceTable([1.0, 2.0, 3.0])
+        choice_next(rng, table)
+        choice_fill!(rng, Vector{Int}(undef, 17), table; nthreads = 1)
         rand_next(rng, 1:6)
         rand_fill!(rng, Vector{Int}(undef, 17), 1:6)
         rand!(st, Vector{Int}(undef, 17), 1:6)

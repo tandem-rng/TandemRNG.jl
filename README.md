@@ -31,6 +31,7 @@ A = Vector{Float32}(undef, 1_000_000)
 rng = rand_fill!(rng, A)                # threaded fill, same values as scalar draws
 children = splitrng(rng, 1000)          # by index, from the key alone
 z, rng = normal_next(rng)               # ziggurat, bit identical to tandem-c
+i, rng = choice_next(rng, ChoiceTable([1, 2, 3, 4]))   # weighted index, alias table
 ```
 
 The [documentation](https://bjmcox.github.io/TandemRNG.jl/) covers derived draws, devices,

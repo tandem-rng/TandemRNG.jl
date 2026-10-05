@@ -196,6 +196,21 @@ for T in (Float32, Float64)
     end
 end
 
+# A weighted choice is one UInt64 draw per index, as `choice_next` and `choice_fill!`.
+Random.gentype(::Type{ChoiceTable}) = Int
+
+@inline Random.rand(r::Stateful, sp::Random.SamplerTrivial{ChoiceTable}) =
+    _choice(sp[], _draw!(r, UInt64))
+
+function Random.rand!(
+    r::Stateful,
+    A::AbstractArray{<:Base.BitInteger},
+    sp::Random.SamplerTrivial{ChoiceTable},
+)
+    _adopt!(r, choice_fill!(Tandem8x32(r), A, sp[]))
+    return A
+end
+
 function Random.seed!(r::Stateful{K}, seed::Integer) where {K}
     r.value = Tandem8x32{K}(seed)
     r.pos = 0
