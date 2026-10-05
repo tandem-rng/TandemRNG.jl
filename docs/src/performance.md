@@ -60,22 +60,21 @@ Julia processes to measure first-use latency.
 
 Apple M4, Julia 1.13.1, 2026-10-05. One task, fills of 2^22 elements, GiB/s written, best of
 three BenchmarkTools passes with alternating generator order, `benchmark/draws.jl`. Tandem
-calls the immutable fills with `nthreads = 1`, PureRNGs its fills with `threaded = false`, and
-Xoshiro and Random123 the `Random` API.
+calls the immutable fills with `nthreads = 1`, and Xoshiro and Random123 the `Random` API.
 
-| one task | Tandem | Xoshiro | PureRNGs Philox4x32 | Random123 Philox4x32 |
-|---|---|---|---|---|
-| `rand!` Float64 | 17.7 | 21.4 | 4.80 | 1.83 |
-| `rand!` Float32 | 17.5 | 20.2 | 5.09 | 1.74 |
-| `rand!` UInt32 | 21.7 | 27.0 | 4.71 | 1.79 |
-| `randn!` Float64 | 6.34 | 7.28 | 1.43 | 1.51 |
-| `randn!` Float32 | 5.50 | 1.28 | 1.09 | 0.75 |
-| `randexp!` Float64 | 6.02 | 6.45 | 2.28 | 1.31 |
-| `randexp!` Float32 | 6.82 | 1.16 | 2.94 | 0.65 |
+| one task | Tandem | Xoshiro | Random123 Philox4x32 |
+|---|---|---|---|
+| `rand!` Float64 | 17.7 | 21.4 | 1.83 |
+| `rand!` Float32 | 17.5 | 20.2 | 1.74 |
+| `rand!` UInt32 | 21.7 | 27.0 | 1.79 |
+| `randn!` Float64 | 6.34 | 7.28 | 1.51 |
+| `randn!` Float32 | 5.50 | 1.28 | 0.75 |
+| `randexp!` Float64 | 6.02 | 6.45 | 1.31 |
+| `randexp!` Float32 | 6.82 | 1.16 | 0.65 |
 
 In the same window tandem-c reaches 16.6, 16.6 and 19.7 GiB/s for the Float64, Float32 and
 UInt32 fills, 7.7 and 5.6 for the normals and 6.2 and 6.9 for the exponentials. Xoshiro's
-normals and exponentials are Julia's ziggurats, and PureRNGs' are its own samplers.
+normals and exponentials are Julia's ziggurats.
 
 The same fills through `Stateful` on 14 threads:
 
@@ -98,8 +97,6 @@ at least two complete reseeding periods. Every case below allocates zero bytes.
 |---|---|---|---|---|
 | Tandem native | 2.49–2.50 | 7.65–7.66 | 10.70–10.72 | 14.75–14.76 |
 | Tandem bridge | 2.48–2.50 | 7.65–7.66 | 10.70–10.71 | 14.75–14.76 |
-| PureRNGs Philox4x32 | 7.72–7.77 | 1.27–1.27 | 1.58–1.59 | 1.53–1.53 |
-| PureRNGs Philox4x64 | 6.21–6.23 | 1.28–1.30 | 1.77–1.78 | 1.47–1.48 |
 | Random123 Philox4x32 | 10.50–10.52 | 0.77–0.77 | 0.68–0.68 | 0.72–0.72 |
 | Random123 Philox4x64 | 7.10–7.13 | 1.40–1.40 | 0.71–0.71 | 0.76–0.78 |
 | Xoshiro | 1.29–1.29 | 6.41–6.41 | 14.23–14.23 | 16.61–16.62 |
@@ -112,13 +109,13 @@ generators supply 24/53. This table predates the Float32 fill through the full-g
 NVIDIA A100 40 GB core measurements (2026-09-21), idle GPU, three passes. Compilation precedes a 0.5-second
 warm-up; each figure uses the minimum of 30 CUDA event timings.
 
-| | Tandem K=32 | PureRNGs Philox4x32 | Random123 Philox4x32 |
-|---|---|---|---|
-| core draws, one chain/thread, GiB/s generated | 4657–4682 | 2891–2895 | 2861–2901 |
+| | Tandem K=32 | Random123 Philox4x32 |
+|---|---|---|
+| core draws, one chain/thread, GiB/s generated | 4657–4682 | 2861–2901 |
 
-The core comparison calls both libraries' actual Philox functions in identical kernels,
+The core comparison calls Random123's actual Philox function in an identical kernel,
 folding all generated words into one stored checksum per chunk. Tandem includes seeding.
-Its core throughput is about 1.6× either reference.
+Its core throughput is about 1.6× Random123's.
 
 A100 fills (2026-10-02), idle GPU, three passes, minimum of 30 CUDA event timings after a 0.5-second warm-up. The fill stages the
 rows of each workgroup in shared memory so a warp writes 512 contiguous bytes.
@@ -127,7 +124,6 @@ rows of each workgroup in shared memory so a warp writes 512 contiguous bytes.
 |---|---|---|---|
 | Tandem K=32, 2^28 | 1374–1375 | 1372–1383 | 1402–1404 |
 | Tandem K=32, 2^27 | 1288–1302 | 1144–1299 | 1347–1351 |
-| PureRNGs Philox4x32, 2^27 | 1313–1368 | 1197–1295 | 1201–1206 |
 | CUDA.jl native, 2^27 | 571–588 | 1076–1107 | 1077–1084 |
 
 At 2^27 the fixed launch and clock-ramp cost shows, which is why the two sizes differ.

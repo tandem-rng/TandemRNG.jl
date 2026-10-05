@@ -51,7 +51,7 @@ Tandem, PureRNGs, and Xoshiro use 24/53 bits. These are API comparisons with dif
 precision contracts, not claims of identical generator work.
 
 `draws.jl` measures one-task fills of uniforms, normals, and exponentials against Xoshiro and
-both Philox4x32 implementations, and the multithreaded `Stateful` fills:
+Random123's Philox4x32, and the multithreaded `Stateful` fills:
 
 ```sh
 julia --startup-file=no --threads=14 --project=benchmark benchmark/draws.jl 22 3

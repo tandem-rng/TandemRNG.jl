@@ -1,12 +1,11 @@
-# One-task fills of uniforms, normals, and exponentials against Xoshiro and the Philox
-# generators, and the multithreaded Tandem fills, for the tables of docs/src/performance.md:
+# One-task fills of uniforms, normals, and exponentials against Xoshiro and Random123's
+# Philox4x32, and the multithreaded Tandem fills, for the tables of docs/src/performance.md:
 #
 #     julia --startup-file=no --threads=14 --project=benchmark benchmark/draws.jl [log2 n] [passes]
 #
 # Each figure is the minimum over BenchmarkTools samples of one fill, then the best of the
 # passes. Passes alternate the generator order. Rates count the bytes written.
 using TandemRNG, BenchmarkTools, Random
-using PureRNGs: PureRNGs, Philox4x32
 import Random123
 
 const DRAWS = (:rand, :randn, :randexp)
@@ -14,9 +13,6 @@ const DRAWS = (:rand, :randn, :randexp)
 tandem1(::Val{:rand}) = (rng, A) -> rand_fill!(rng, A; nthreads = 1)
 tandem1(::Val{:randn}) = (rng, A) -> normal_fill!(rng, A; nthreads = 1)
 tandem1(::Val{:randexp}) = (rng, A) -> exponential_fill!(rng, A; nthreads = 1)
-pure1(::Val{:rand}) = (rng, A) -> PureRNGs.rand_next!(rng, A; threaded = false)
-pure1(::Val{:randn}) = (rng, A) -> PureRNGs.randn_next!(rng, A; threaded = false)
-pure1(::Val{:randexp}) = (rng, A) -> PureRNGs.randexp_next!(rng, A; threaded = false)
 random(::Val{:rand}) = rand!
 random(::Val{:randn}) = randn!
 random(::Val{:randexp}) = randexp!
@@ -26,7 +22,6 @@ function one_task(d, seed)
     return (
         ("Tandem", Tandem8x32(seed), tandem1(Val(d))),
         ("Xoshiro", Xoshiro(seed), random(Val(d))),
-        ("PureRNGs Philox4x32", Philox4x32(seed), pure1(Val(d))),
         ("Random123 Philox4x32", Random123.Philox4x(UInt32, (0, seed), 10), random(Val(d))),
     )
 end
