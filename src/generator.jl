@@ -129,8 +129,9 @@ end
 @inline _block(o::Row, ℓ::Int) =
     (lane(o[1], ℓ + 1), lane(o[2], ℓ + 1), lane(o[3], ℓ + 1), lane(o[4], ℓ + 1))
 
-# The block that holds bit `p`, from its chunk alone: one F and at most K steps of T.
-function _block_at(key::O4, p::UInt64, K)
+# The block that holds bit `p`, from its chunk alone: one F and at most K steps of T. Inlined,
+# so that the callers' constant K turns the division into a shift.
+@inline function _block_at(key::O4, p::UInt64, K)
     b = p >> 7
     row = b >> 3
     c = ((row ÷ UInt64(K)) << 3) | (b & 7)

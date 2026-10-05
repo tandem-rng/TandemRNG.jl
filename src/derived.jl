@@ -282,9 +282,7 @@ end
 
 # The slow path of a draw r that missed, whose global draw index is g, on the fallback
 # split(g) of `sub`. ln is −0.5·_neg2_log, exact given _neg2_log. Julia does not contract a
-# product into a sum, so every other operation rounds once, as the appendix requires. A fill
-# maps one group of draws at a time, about two misses for K = 32, so seeding the fallbacks
-# eight at a time on the row lanes, as tandem-c does, measured slower here.
+# product into a sum, so every other operation rounds once, as the appendix requires.
 @noinline function _zig_miss(sub::O4, ::Val{K}, r::UInt64, g::UInt64) where {K}
     key = _child_key(sub, g >> 1, DOMAIN_SPLIT, UInt32(0), g & 1)
     blk = _block_at(key, UInt64(0), K)
@@ -429,12 +427,22 @@ end
     return nothing
 end
 
-# Map the raw draws R[i:j] to normals in A[i:j]. R shares A's storage.
+# Map the raw draws R[i:j] to normals in A[i:j]. R shares A's storage. The inner loop runs to
+# the next miss and holds no call, which made the map 1.6 times faster on Zen 2 than a call
+# in its body. A group of draws holds about two misses for K = 32, so seeding the fallbacks
+# eight at a time on the row lanes, as tandem-c does, measured slower here.
 @inline function _zig_map!(A, R, i::Int, j::Int, sub::O4, g0::UInt64, ::Val{K}) where {K}
-    @inbounds for k = i:j
-        r = R[k]
-        x, inner = _zig_candidate(r)
-        A[k] = inner ? x : _zig_miss(sub, Val(K), r, g0 + UInt64(k - 1))
+    k = i
+    @inbounds while k <= j
+        while k <= j
+            x, inner = _zig_candidate(R[k])
+            inner || break
+            A[k] = x
+            k += 1
+        end
+        k > j && break
+        A[k] = _zig_miss(sub, Val(K), R[k], g0 + UInt64(k - 1))
+        k += 1
     end
     return nothing
 end
