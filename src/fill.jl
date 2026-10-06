@@ -173,19 +173,19 @@ end
 end
 # (raw >> 11) · 2^-53 for the four little-endian word pairs of a memory-order vector.
 @static if Sys.ARCH === :aarch64
-    # ucvtf with 53 fraction bits converts and scales in one instruction. The value is
-    # below 2^53, so the result is exact like the product.
+    # ucvtf with 64 fraction bits converts and scales in one instruction. The caller has
+    # cleared the 11 low bits, so the value has at most 53 significant bits and converts
+    # exactly to (raw >> 11) · 2^-53.
     @inline _vfloat64(a::V8) = Base.llvmcall(
         (
             """
             declare <2 x double> @llvm.aarch64.neon.vcvtfxu2fp.v2f64.v2i64(<2 x i64>, i32)
             define <8 x i32> @entry(<8 x i32> %0) #0 {
                 %w = bitcast <8 x i32> %0 to <4 x i64>
-                %s = lshr <4 x i64> %w, <i64 11, i64 11, i64 11, i64 11>
-                %a = shufflevector <4 x i64> %s, <4 x i64> poison, <2 x i32> <i32 0, i32 1>
-                %b = shufflevector <4 x i64> %s, <4 x i64> poison, <2 x i32> <i32 2, i32 3>
-                %fa = call <2 x double> @llvm.aarch64.neon.vcvtfxu2fp.v2f64.v2i64(<2 x i64> %a, i32 53)
-                %fb = call <2 x double> @llvm.aarch64.neon.vcvtfxu2fp.v2f64.v2i64(<2 x i64> %b, i32 53)
+                %a = shufflevector <4 x i64> %w, <4 x i64> poison, <2 x i32> <i32 0, i32 1>
+                %b = shufflevector <4 x i64> %w, <4 x i64> poison, <2 x i32> <i32 2, i32 3>
+                %fa = call <2 x double> @llvm.aarch64.neon.vcvtfxu2fp.v2f64.v2i64(<2 x i64> %a, i32 64)
+                %fb = call <2 x double> @llvm.aarch64.neon.vcvtfxu2fp.v2f64.v2i64(<2 x i64> %b, i32 64)
                 %f = shufflevector <2 x double> %fa, <2 x double> %fb, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
                 %r = bitcast <4 x double> %f to <8 x i32>
                 ret <8 x i32> %r
@@ -217,7 +217,14 @@ else
 end
 
 @inline function _row_words(::Type{Float64}, o::Row)
-    words = _vtranspose(o[1].v, o[2].v, o[3].v, o[4].v)
+    @static if Sys.ARCH === :aarch64
+        # Words 1 and 3 hold the low halves of the draws. Clearing their 11 low bits before
+        # the transpose takes four vector ands, where shifting the draws after it takes eight.
+        low = _vsplat(0xfffff800)
+        words = _vtranspose(_vand(o[1].v, low), o[2].v, _vand(o[3].v, low), o[4].v)
+    else
+        words = _vtranspose(o[1].v, o[2].v, o[3].v, o[4].v)
+    end
     return map(_vfloat64, words)
 end
 

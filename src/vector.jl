@@ -4,7 +4,7 @@
 
 const V8 = NTuple{8,VecElement{UInt32}}
 
-for (name, op) in ((:_vxor, "xor"), (:_vadd, "add"), (:_vor, "or"))
+for (name, op) in ((:_vxor, "xor"), (:_vadd, "add"), (:_vor, "or"), (:_vand, "and"))
     ir = "%r = $op <8 x i32> %0, %1\nret <8 x i32> %r"
     @eval @inline $name(a::V8, b::V8) = Base.llvmcall($ir, V8, Tuple{V8,V8}, a, b)
 end
