@@ -5,6 +5,8 @@
 - Scalar draws that start aligned and end inside their block take one branch. The 8- to
   32-bit scalar chains run about 40 % faster and the 64-bit chains about 10 % faster.
   Float64 fills on AArch64 convert with one fixed-point instruction. Values are unchanged.
+- Scalar draws compile inside Metal kernels. The out-of-line state builders take the key as
+  two 64-bit words, since Metal has no 128-bit integers.
 - Float64 normals are the 1024-layer ziggurat of Appendix A, one UInt64 draw per element,
   bit identical to tandem-c. This changes every Float64 normal value and the positions
   after Float64 normal draws. An empty Float64 normal fill aligns the position to 64 bits.

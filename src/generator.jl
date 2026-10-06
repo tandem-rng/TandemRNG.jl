@@ -94,18 +94,18 @@ end
 @inline _row(pos::UInt64) = pos >> 10
 @inline _lane(pos::UInt64) = Int((pos >> 7) & 7)
 
-# The out-of-line state builders take the key as one `UInt128`. A tuple argument travels by
-# pointer in Julia's calling convention, and a pointer into the generator value would pin
-# the whole value to the stack in every caller.
-@inline _key128(key::O4) =
-    UInt128(key[1]) | UInt128(key[2]) << 32 | UInt128(key[3]) << 64 | UInt128(key[4]) << 96
-@inline _key4(k::UInt128) =
-    (k % UInt32, (k >> 32) % UInt32, (k >> 64) % UInt32, (k >> 96) % UInt32)
+# The out-of-line state builders take the key as two `UInt64` arguments. A tuple argument
+# travels by pointer in Julia's calling convention, and a pointer into the generator value
+# would pin the whole value to the stack in every caller. Metal has no 128-bit integers.
+@inline _key64(key::O4) =
+    (UInt64(key[1]) | UInt64(key[2]) << 32, UInt64(key[3]) | UInt64(key[4]) << 32)
+@inline _key4(lo::UInt64, hi::UInt64) =
+    (lo % UInt32, (lo >> 32) % UInt32, hi % UInt32, (hi >> 32) % UInt32)
 
 # The row's eight lanes after its step in natural order: seed the group, then T once per
 # row up to it. Out of line so the unrolled F does not sit inside every draw loop.
-@noinline function _row_state(key::UInt128, row::UInt64, ::Val{K}) where {K}
-    o, h = seed_row(_key4(key), row ÷ UInt64(K))
+@noinline function _row_state(lo::UInt64, hi::UInt64, row::UInt64, ::Val{K}) where {K}
+    o, h = seed_row(_key4(lo, hi), row ÷ UInt64(K))
     for _ = 0:(row&UInt64(K-1))
         o, h = step(o, h)
     end
@@ -114,8 +114,8 @@ end
 
 # Working state at any position: the row in natural order, then `o` rotated to the lane.
 # Out of line because of the runtime lane index (see the lane order note above).
-@noinline function _state_at(key::UInt128, pos::UInt64, ::Val{K}) where {K}
-    o, h = _row_state(key, _row(pos), Val(K))
+@noinline function _state_at(lo::UInt64, hi::UInt64, pos::UInt64, ::Val{K}) where {K}
+    o, h = _row_state(lo, hi, _row(pos), Val(K))
     ℓ = _lane(pos)
     return ntuple(w -> _rotate(o[w], ℓ), Val(4)), h
 end
@@ -152,7 +152,7 @@ function Tandem8x32{K}(key::O4, pos::Integer = 0) where {K}
     0 <= pos < MAX_START_POSITION ||
         throw(ArgumentError("start position must satisfy 0 <= position < 2^63"))
     pos = UInt64(pos)
-    o, h = _state_at(_key128(key), pos, Val(K))
+    o, h = _state_at(_key64(key)..., pos, Val(K))
     return Tandem8x32{K}(key, pos, o, h)
 end
 
@@ -211,7 +211,7 @@ end
         if row & UInt64(K - 1) != 0
             o, h = step(o, h)
         else
-            o, h = _row_state(_key128(key), row, Val(K))
+            o, h = _row_state(_key64(key)..., row, Val(K))
         end
     end
     return o, h
@@ -220,7 +220,7 @@ end
 # A short forward move reuses the held row and crosses at most eight block boundaries.
 @inline function _advance_short(rng::Tandem8x32{K}, pos::UInt64) where {K}
     return _advance_short(
-        _key128(rng.key),
+        _key64(rng.key)...,
         rng.pos,
         pos,
         Val(K),
@@ -238,7 +238,8 @@ end
 # Bare vector arguments travel by value. Passing the generator or rows by pointer would
 # pin the scalar caller's whole state to the stack even when this branch is not taken.
 @noinline function _advance_short(
-    key::UInt128,
+    lo::UInt64,
+    hi::UInt64,
     from::UInt64,
     pos::UInt64,
     ::Val{K},
@@ -255,7 +256,7 @@ end
     target = pos & ~UInt64(BLOCK_BITS - 1)
     o = (Lane8(o1), Lane8(o2), Lane8(o3), Lane8(o4))
     h = (Lane8(h1), Lane8(h2), Lane8(h3), Lane8(h4))
-    key4 = _key4(key)
+    key4 = _key4(lo, hi)
     while block != target
         block += UInt64(BLOCK_BITS)
         o, h = _next_block(key4, o, h, block, Val(K))
@@ -275,7 +276,7 @@ end
         if pos - rng.pos <= UInt64(ROW_BITS)
             o, h = _advance_short(rng, pos)
         else
-            o, h = _state_at(_key128(rng.key), pos, Val(K))
+            o, h = _state_at(_key64(rng.key)..., pos, Val(K))
         end
     end
     return _rebuild(rng, pos, o, h)

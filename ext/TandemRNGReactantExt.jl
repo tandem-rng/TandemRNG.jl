@@ -46,7 +46,7 @@ function TR.Tandem8x32(rng::RNG{K}) where {K}
     state = Base.Array(rng.state)
     key = ntuple(i -> state[i] % UInt32, Val(4))
     pos = state[5]
-    o, h = TR._state_at(TR._key128(key), pos, Val(K))
+    o, h = TR._state_at(TR._key64(key)..., pos, Val(K))
     return TR.Tandem8x32{K}(key, pos, o, h)
 end
 

@@ -4,8 +4,8 @@ import TandemRNG as TR
 import PureRNGs as PR
 using KernelAbstractions
 
-# Device cursors use scalar words, so no host UInt128 state-builder argument
-# enters Metal code. Permutations and child-key derivation remain Tandem's own.
+# Device cursors use scalar words, so no host state builder enters device code.
+# Permutations and child-key derivation remain Tandem's own.
 struct _TileEngine{K,D}
     key::TR.O4
     device::D
@@ -14,7 +14,7 @@ end
 @inline PR._engine_backend(rng::_TileEngine) = rng.device
 
 # Cold Gamma and Dirichlet recovery read scalar blocks instead of carrying
-# eight rows or using the host generator's UInt128 state builders.
+# eight rows or using the host generator's state builders.
 struct _BlockCursor{K}
     key::TR.O4
     pos::UInt64
