@@ -56,24 +56,18 @@ julia --startup-file=no --threads=14 --project=benchmark benchmark/draws.jl 22 3
 
 ## CUDA setup
 
-The GPU runner requires CUDA 6, an NVIDIA GPU, and `nvidia-smi` on PATH. It also needs
-PureRNGs cloned beside the TandemRNG checkout:
-
-```sh
-git clone https://github.com/BJMCox/PureRNGs.jl ../PureRNGs.jl
-```
-
+The GPU runner requires CUDA 6, an NVIDIA GPU, and `nvidia-smi` on PATH.
 Use the separate environment:
 
 ```sh
-julia --startup-file=no --project=benchmark/cuda -e 'using Pkg; Pkg.develop([PackageSpec(path="."), PackageSpec(path="../PureRNGs.jl")]); Pkg.instantiate(); Pkg.precompile()'
+julia --startup-file=no --project=benchmark/cuda -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate(); Pkg.precompile()'
 julia --startup-file=no --threads=8 --gcthreads=1 --project=benchmark/cuda benchmark/run.jl gpu results/cuda --device=0
 ```
 
 The runner checks device use before and after each group. It refuses another compute
 process, and requires zero utilization before timing. Final utilization can include
 the runner's own work. It disables scalar GPU indexing and checks Tandem's
-native and bridge outputs against CPU results before timing.
+outputs against CPU results before timing.
 
 The default fills use 2^20 and 2^27 elements. The latter needs 1 GiB for a Float64
 destination. Reduce `--sizes` for smaller devices. The script releases each destination
@@ -84,7 +78,8 @@ Host allocation bytes include the synchronized launch. They exclude destination 
 The public scalar report measures 1,024 draws per thread from bound RNG states.
 Its throughput counts generated Float64 bytes, not global-memory writes.
 The core report measures the library cores separately. Random123 has no GPU array-fill
-API here, so it appears only in that core comparison. CURAND's library API has no Bool case.
+API, so it appears in the scalar and core comparisons through its stateless Philox4x32-10
+core. CURAND's library API has no Bool case.
 
 ## Metal setup
 

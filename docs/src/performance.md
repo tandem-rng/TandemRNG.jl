@@ -173,8 +173,8 @@ fill is bound by integer throughput, not by memory.
 ## Reproduce measurements
 
 The [benchmark guide](https://github.com/tandem-rng/TandemRNG.jl/blob/main/benchmark/README.md)
-provides separate CPU, CUDA, and first-use runners. It compares Tandem's native
-interface and PureRNGs bridge with PureRNGs, Random123, and available platform generators.
+provides separate CPU, CUDA, Metal, and first-use runners. It compares Tandem with
+third-party generators only: Xoshiro, Random123, CUDA.jl, CURAND, and Metal.jl.
 It documents setup, supported types, timing protocols, and API precision differences.
 
 Use an idle host and repeated passes. Separate compilation, allocation, and first

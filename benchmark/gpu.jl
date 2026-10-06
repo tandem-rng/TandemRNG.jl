@@ -1,8 +1,8 @@
-# GPU benchmarks on one CUDA device: the fill against PureRNGs
-# Philox4x32, CUDA.jl's native generator, and CURAND; the `fill_lanes!` kernel over workgroup
-# sizes; and in-kernel draws against both libraries' Philox4x32-10 cores in the same
-# kernel shape. Random123 has no CUDA array-fill API. Its comparison uses its stateless core.
-# Run from an environment with CUDA, PureRNGs, Random123, Random, and TandemRNG.
+# GPU benchmarks on one CUDA device: the fill against CUDA.jl's native generator and CURAND;
+# the `fill_lanes!` kernel over workgroup sizes; scalar Float64 chains in a kernel; and
+# in-kernel draws against Random123's Philox4x32-10 core in the same kernel shape. Random123
+# has no CUDA array-fill API, so its chains and core comparison use its stateless core.
+# Run from an environment with CUDA, Random123, Random, and TandemRNG.
 # KernelAbstractions comes through the extension, so the environment needs no extra dependency.
 #
 # The GPUs are shared. `run` refuses a busy device unless forced, and prints the idle check
@@ -10,7 +10,6 @@
 module GPUBench
 
 using CUDA
-using PureRNGs
 import Random123
 using Random
 using TandemRNG
@@ -25,9 +24,6 @@ const TYPES = (Float32, UInt32, Float64, Bool)
 # CUDA version. `native_rng()` selects the distinct kernel generator of the cuRAND package.
 const GENERATORS = (
     "TandemRNG K=32",
-    "Tandem bridge",
-    "PureRNGs Philox4x32",
-    "PureRNGs Philox4x64",
     "CUDA.jl native",
     "cuRAND NativeRNG",
     "CURAND",
@@ -91,17 +87,12 @@ function markdown(io, header, rows)
 end
 
 function generators(::Type{T}, A) where {T}
-    tandem = PureRNGs.MLDataDevices.CUDADevice()(Tandem8x32{CHUNK}(1))
-    philox = PureRNGs.MLDataDevices.CUDADevice()(Philox4x32(1))
-    philox64 = PureRNGs.MLDataDevices.CUDADevice()(Philox4x64(1))
+    tandem = TandemRNG.MLDataDevices.CUDADevice()(Tandem8x32{CHUNK}(1))
     native = CUDA.default_rng()
     kernel_rng = CUDA.CURAND.native_rng()
     library = CUDA.CURAND.library_rng()
     fills = Dict{String,Any}(
         "TandemRNG K=32" => () -> rand_fill!(tandem, A),
-        "Tandem bridge" => () -> PureRNGs.rand_next!(tandem, A),
-        "PureRNGs Philox4x32" => () -> rand_next!(philox, A),
-        "PureRNGs Philox4x64" => () -> rand_next!(philox64, A),
         "CUDA.jl native" => () -> Random.rand!(native, A),
         "cuRAND NativeRNG" => () -> Random.rand!(kernel_rng, A),
     )
@@ -123,7 +114,7 @@ function compare_gpu(io::IO; gpu, sizes = (1 << 20, 1 << 27), passes = 3, reps =
     for T in TYPES, n in sizes
         A = CuVector{T}(undef, n)
         fills = generators(T, A)
-        # Validate the public native and bridge routes before timing large fills.
+        # Validate the public fill before timing large fills.
         small = CuVector{T}(undef, 1025)
         rng = Tandem8x32{CHUNK}(1)
         expected = Vector{T}(undef, length(small))
@@ -131,8 +122,6 @@ function compare_gpu(io::IO; gpu, sizes = (1 << 20, 1 << 27), passes = 3, reps =
         bound = TandemRNG.MLDataDevices.CUDADevice()(rng)
         native = rand_fill!(bound, small)
         Array(small) == expected || error("GPU native fill differs from CPU")
-        _, bridged = PureRNGs.rand_next!(bound, small)
-        Array(small) == expected && native == bridged || error("GPU bridge fill differs")
         TandemRNG.MLDataDevices.CPUDevice()(native) == after ||
             error("GPU end state differs")
         for pass = 1:passes, name in (isodd(pass) ? GENERATORS : reverse(GENERATORS))
@@ -173,6 +162,32 @@ end
     output[i] = acc
 end
 
+# Random123's Philox4x32-10 core as an immutable chain: each block gives two Float64 draws of
+# 53 bits, then the counter advances. Random123's own generators are mutable and host-only.
+struct PhiloxChain
+    key::NTuple{2,UInt32}
+    counter::UInt64
+    block::O4
+    half::Bool
+end
+
+@inline philox_block(key, n::UInt64) =
+    Random123.philox(key, (n % UInt32, (n >> 32) % UInt32, UInt32(0), UInt32(0)), Val(10))
+
+function PhiloxChain(i::Integer)
+    key = (i % UInt32, 0x9e3779b9)
+    return PhiloxChain(key, UInt64(0), philox_block(key, UInt64(0)), false)
+end
+
+@inline function philox_next(rng::PhiloxChain, ::Type{Float64})
+    b = rng.block
+    raw = rng.half ? UInt64(b[3]) | UInt64(b[4]) << 32 : UInt64(b[1]) | UInt64(b[2]) << 32
+    x = Float64(raw >> 11) * 0x1p-53
+    rng.half || return x, PhiloxChain(rng.key, rng.counter, b, true)
+    n = rng.counter + UInt64(1)
+    return x, PhiloxChain(rng.key, n, philox_block(rng.key, n), false)
+end
+
 function compare_public_draws(io::IO; gpu, n = 1 << 16, count = 1024, passes = 3, reps = 30)
     n > 0 && count > 0 && passes > 0 && reps > 0 ||
         throw(ArgumentError("counts, passes, and reps must be positive"))
@@ -182,16 +197,14 @@ function compare_public_draws(io::IO; gpu, n = 1 << 16, count = 1024, passes = 3
     CUDA.allowscalar(false)
     device = TandemRNG.MLDataDevices.CUDADevice()
     cases = (
-        ("Tandem native", Tandem8x32{CHUNK}, TandemRNG.rand_next),
-        ("Tandem bridge", Tandem8x32{CHUNK}, PureRNGs.rand_next),
-        ("PureRNGs Philox4x32", Philox4x32, PureRNGs.rand_next),
-        ("PureRNGs Philox4x64", Philox4x64, PureRNGs.rand_next),
+        ("Tandem native", i -> device(Tandem8x32{CHUNK}(i)), TandemRNG.rand_next),
+        ("Random123 Philox4x32", PhiloxChain, philox_next),
     )
     println(io, "# before: ", describe(before))
     println(io, "pass\tgenerator\tchains\tdraws_per_chain\tseconds\tGiB_s_generated")
     fixtures = map(cases) do (name, constructor, draw)
         cpu = [constructor(i) for i = 1:n]
-        states = CuArray(device.(cpu))
+        states = CuArray(cpu)
         output = CuVector{Float64}(undef, n)
         kernel = public_chain!(CUDABackend(), 256)
         call = () -> kernel(output, states, draw, count; ndrange = n)
@@ -243,7 +256,7 @@ function run(; gpu, n = 1 << 27, reps = 30, force = false, io::IO = stdout)
     CUDA.device!(gpu)
     println(
         io,
-        "Julia $VERSION, CUDA $(pkgversion(CUDA)), PureRNGs $(pkgversion(PureRNGs)), Random123 $(pkgversion(Random123))",
+        "Julia $VERSION, CUDA $(pkgversion(CUDA)), Random123 $(pkgversion(Random123))",
     )
     println(
         io,
@@ -341,8 +354,6 @@ end
     end
 end
 
-# PureRNGs exposes its block implementation internally. Random123 exports `philox`.
-@inline pure_philox(c::O4, k::NTuple{2,UInt32}) = PureRNGs._philox4x32(c, k, Val(10))
 @inline external_philox(c::O4, k::NTuple{2,UInt32}) = Random123.philox(k, c, Val(10))
 
 # Chunk j owns counters j·K to j·K + K − 1 in the low two counter words. Same chunk
@@ -411,21 +422,12 @@ function draws(;
     )
     tandem = [rate(draws_tandem!, (key,), C) for C in chains]
     k = (key[1], key[2])
-    pure = [rate(draws_philox!, (k, pure_philox), C) for C in chains]
     external = [rate(draws_philox!, (k, external_philox), C) for C in chains]
     after = idle_check(gpu)
     markdown(
         io,
-        [
-            "chains per thread",
-            "TandemRNG K=$K",
-            "PureRNGs Philox4x32",
-            "Random123 Philox4x32",
-        ],
-        [
-            (string(C), fmt(t), fmt(p), fmt(r)) for
-            (C, t, p, r) in zip(chains, tandem, pure, external)
-        ],
+        ["chains per thread", "TandemRNG K=$K", "Random123 Philox4x32"],
+        [(string(C), fmt(t), fmt(r)) for (C, t, r) in zip(chains, tandem, external)],
     )
     println(
         io,
@@ -433,7 +435,7 @@ function draws(;
     )
     println(io, "before: ", describe(before))
     println(io, "after:  ", describe(after))
-    return (; chains, tandem, pure, external, before, after)
+    return (; chains, tandem, external, before, after)
 end
 
 # Untimed checks cover every chain shape and compare GPU words with scalar CPU folds.
@@ -450,9 +452,7 @@ function validate_draws(K, chains; n = 1024)
             ta = fold(ta, o)
             counter = UInt64(j * K + s)
             c = (counter % UInt32, (counter >> 32) % UInt32, UInt32(0), UInt32(0))
-            p = external_philox(c, k)
-            pure_philox(c, k) == p || error("Philox library cores disagree")
-            pa = fold(pa, p)
+            pa = fold(pa, external_philox(c, k))
         end
         tandem[j+1], philox[j+1] = ta, pa
     end
@@ -461,17 +461,15 @@ function validate_draws(K, chains; n = 1024)
         n % C == 0 || throw(ArgumentError("validation size must divide every chain count"))
         draws_tandem!(CUDABackend(), 256)(out, key, Val(K), Val(C); ndrange = n ÷ C)
         Array(out) == tandem || error("Tandem GPU draw fold differs from CPU")
-        for block in (pure_philox, external_philox)
-            draws_philox!(CUDABackend(), 256)(
-                out,
-                k,
-                block,
-                Val(K),
-                Val(C);
-                ndrange = n ÷ C,
-            )
-            Array(out) == philox || error("Philox GPU draw fold differs from CPU")
-        end
+        draws_philox!(CUDABackend(), 256)(
+            out,
+            k,
+            external_philox,
+            Val(K),
+            Val(C);
+            ndrange = n ÷ C,
+        )
+        Array(out) == philox || error("Philox GPU draw fold differs from CPU")
     end
     return nothing
 end
