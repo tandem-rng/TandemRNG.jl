@@ -113,19 +113,19 @@ fallbacks seeded eight wide, as in tandem-c. Float32 normals and the
 exponentials run tandem-c's polynomials, vectorized two doubles or four floats wide with four
 interleaved iterations. Every float fill converts the words in the row loop before the store.
 
-Tandem on AMD EPYC 7702P (AVX2), Julia 1.13, 2026-09-26. One task, 2^20 elements,
-three BenchmarkTools passes with alternating generator order. Every case below allocates
-zero bytes.
+AMD EPYC 7702P (AVX2), Julia 1.13.1, 2026-10-06, one session. One task, 2^20 elements,
+three BenchmarkTools passes with alternating generator order, `compare_cpu` in
+`benchmark/benchmarks.jl`. Every case below allocates zero bytes.
 
 | generator | Float64 fill, GiB/s | Float32 fill, GiB/s | UInt32 fill, GiB/s |
 |---|---|---|---|
-| Tandem | 7.65–7.66 | 10.70–10.72 | 14.75–14.76 |
-| Xoshiro | 6.41–6.41 | 14.23–14.23 | 16.61–16.62 |
-| Random123 Philox4x64 | 1.40–1.40 | 0.71–0.71 | 0.76–0.78 |
-| Random123 Philox4x32 | 0.77–0.77 | 0.68–0.68 | 0.72–0.72 |
+| Tandem | 9.37–9.38 | 10.06–10.07 | 14.68–14.68 |
+| Xoshiro | 6.41–6.41 | 14.24–14.24 | 16.63–16.63 |
+| Random123 Philox4x64 | 1.40–1.41 | 0.71–0.72 | 0.77–0.78 |
+| Random123 Philox4x32 | 0.77–0.77 | 0.67–0.68 | 0.71–0.72 |
 
 Random123 1.7.1 supplies 23/52 random bits for these Float32/Float64 APIs; the other
-generators supply 24/53. This table predates the Float32 fill through the full-group loop.
+generators supply 24/53.
 
 ### GPU
 
