@@ -58,32 +58,38 @@ Julia processes to measure first-use latency.
 
 ### CPU
 
-Apple M4, Julia 1.13.1, 2026-10-05. One task, fills of 2^22 elements, GiB/s written, best of
-three BenchmarkTools passes with alternating generator order, `benchmark/draws.jl`. Tandem
-calls the immutable fills with `nthreads = 1`, and Xoshiro and Random123 the `Random` API.
+Apple M4 Pro, Julia 1.13.1, 2026-10-06, all CPU and Metal figures from one session. One
+task, fills of 2^22 elements, GiB/s written, best of three BenchmarkTools passes with
+alternating generator order, `benchmark/draws.jl`. Tandem calls the immutable fills with
+`nthreads = 1`, and Xoshiro and Random123 the `Random` API.
 
 | one task | Tandem | Xoshiro | Random123 Philox4x32 |
 |---|---|---|---|
-| `rand!` Float64 | 17.7 | 21.4 | 1.83 |
-| `rand!` Float32 | 17.5 | 20.2 | 1.74 |
-| `rand!` UInt32 | 21.7 | 27.0 | 1.79 |
-| `randn!` Float64 | 7.87 | 7.20 | 1.49 |
-| `randn!` Float32 | 5.50 | 1.28 | 0.75 |
-| `randexp!` Float64 | 6.02 | 6.45 | 1.31 |
-| `randexp!` Float32 | 6.82 | 1.16 | 0.65 |
+| `rand!` Float64 | 17.2 | 19.8 | 1.81 |
+| `rand!` Float32 | 16.8 | 19.6 | 1.71 |
+| `rand!` UInt32 | 19.6 | 26.3 | 1.77 |
+| `randn!` Float64 | 7.74 | 7.19 | 1.49 |
+| `randn!` Float32 | 5.54 | 1.25 | 0.74 |
+| `randexp!` Float64 | 6.16 | 6.35 | 1.29 |
+| `randexp!` Float32 | 6.78 | 1.13 | 0.65 |
 
-In the same window tandem-c reaches 16.6, 16.6 and 19.7 GiB/s for the Float64, Float32 and
-UInt32 fills, 7.7 and 5.6 for the normals and 6.2 and 6.9 for the exponentials. The
-`randn!` Float64 row comes from a later window, in which tandem-c reaches 7.6. Xoshiro's
-normals and exponentials are Julia's ziggurats.
+In the same session tandem-c reaches 16.6, 16.5 and 19.1 GiB/s for the Float64, Float32 and
+UInt32 fills, 7.7 and 5.5 for the normals and 6.1 and 6.7 for the exponentials. A UInt32 row
+of 128 bytes takes 81 vector instructions, so the uniform fills run at the vector issue rate
+of the core. Xoshiro's normals and exponentials are Julia's ziggurats.
 
-The same fills through `Stateful` on 14 threads:
+The same fills on 14 threads. Tandem fills through `Stateful`. Xoshiro and Random123 have
+no threaded fill, so each task fills its own contiguous chunk with its own generator.
 
-| 14 tasks | `rand!` | `randn!` | `randexp!` |
+| 14 tasks | Tandem `Stateful` | Xoshiro | Random123 Philox4x32 |
 |---|---|---|---|
-| Float64 | 108 | 52.2 | 43.1 |
-| Float32 | 109 | 37.2 | 42.5 |
-| UInt32 | 127 | | |
+| `rand!` Float64 | 111 | 117 | 11.2 |
+| `rand!` Float32 | 108 | 126 | 10.3 |
+| `rand!` UInt32 | 126 | 150 | 11.3 |
+| `randn!` Float64 | 49.4 | 47.9 | 9.22 |
+| `randn!` Float32 | 36.7 | 9.76 | 4.76 |
+| `randexp!` Float64 | 41.4 | 41.9 | 8.09 |
+| `randexp!` Float32 | 43.7 | 10.8 | 4.18 |
 
 Scalar chains of 1024 Float64 draws, which span two complete K = 32 groups and so include
 the reseeding, one task, three passes with alternating generator order, GiB/s at 8 bytes per
@@ -92,12 +98,14 @@ references draw through the `Random` sampler.
 
 | generator | chain, GiB/s |
 |---|---|
-| Tandem | 5.53–5.76 |
-| Random123 Philox4x32 | 1.84–1.86 |
-| Random123 Philox4x64 | 3.03–3.03 |
-| Xoshiro | 10.5–10.6 |
+| Tandem | 7.60–7.60 |
+| Random123 Philox4x32 | 1.83–1.83 |
+| Random123 Philox4x64 | 2.99–3.05 |
+| Xoshiro | 10.2–10.4 |
 
-The Tandem chain rate moves between runs: some passes in other windows reached 7.0 GiB/s.
+tandem-c's own Float64 chain benchmark reaches 5.2 GiB/s in the same session. Each Tandem draw that ends
+inside its block reads the held block and changes no state. Every second Float64 draw
+crosses a block and rotates the row state by one lane.
 
 Float64 normals are the ziggurat: a table pass over each group of UInt64 draws, three draws
 per test. The 0.43 % of draws that miss queue across groups and resolve eight at a time on
@@ -146,10 +154,21 @@ At 2^27 the fixed launch and clock-ramp cost shows, which is why the two sizes d
 Chained scalar Float64 calls through the public A100 API reach about 597 GiB/s. These
 measure different work.
 
-Apple M4 Pro through Metal.jl, minimum of seven after a 0.5 s warm-up: UInt32
-fill 164 GiB/s at 2^26 elements (126 at 2^24), UInt64 163 at 2^25, Float32 155 at 2^26.
-A constant-store kernel reaches 720 GiB/s on the same GPU, so the Apple fill is bound by
-integer throughput, not by memory. `benchmark/metal/` holds the environment.
+Apple M4 Pro GPU through Metal.jl 1.11.1, in the CPU session above. Each figure is the
+minimum of seven synchronized fills after a 0.5 s warm-up, best of three passes with
+alternating generator order, `benchmark/metal/fills.jl`. Metal.jl's `rand!` draws these
+types from Metal Performance Shaders' Philox.
+
+| elements | Tandem | Metal.jl `rand!` |
+|---|---|---|
+| UInt32, 2^24 | 74.6 | 127 |
+| UInt32, 2^26 | 164 | 184 |
+| UInt64, 2^25 | 165 | 175 |
+| Float32, 2^26 | 153 | 183 |
+
+A synchronized Tandem fill of 1024 elements takes about 0.2 ms, twice Metal.jl's, which
+dominates at 2^24. A constant-store kernel reaches 720 GiB/s on the same GPU, so the Apple
+fill is bound by integer throughput, not by memory.
 
 ## Reproduce measurements
 
