@@ -140,14 +140,23 @@ The core comparison calls Random123's actual Philox function in an identical ker
 folding all generated words into one stored checksum per chunk. Tandem includes seeding.
 Its core throughput is about 1.6× Random123's.
 
-A100 fills (2026-10-02), idle GPU, three passes, minimum of 30 CUDA event timings after a 0.5-second warm-up. The fill stages the
-rows of each workgroup in shared memory so a warp writes 512 contiguous bytes.
+A100 fills (2026-10-06), one session on an idle GPU, CUDA.jl 6.4.2, three passes with
+alternating generator order, minimum of 30 CUDA event timings after a 0.5-second warm-up,
+`compare_gpu` in `benchmark/gpu.jl`. The fill stages the rows of each workgroup in shared
+memory so a warp writes 512 contiguous bytes. Within each type the generators are in speed
+order. cuRAND is its library Philox4x32-10 generator.
 
-| elements | Float32 fill, GiB/s | UInt32 fill, GiB/s | Float64 fill, GiB/s |
+| fill | generator | 2^27 elements, GiB/s | 2^28 elements, GiB/s |
 |---|---|---|---|
-| Tandem K=32, 2^28 | 1374–1375 | 1372–1383 | 1402–1404 |
-| Tandem K=32, 2^27 | 1288–1302 | 1144–1299 | 1347–1351 |
-| CUDA.jl native, 2^27 | 571–588 | 1076–1107 | 1077–1084 |
+| Float32 | Tandem K=32 | 1323–1327 | 1347–1353 |
+| | cuRAND Philox4x32-10 | 1233–1268 | 1272–1282 |
+| | CUDA.jl native | 585–590 | 583–584 |
+| UInt32 | Tandem K=32 | 1262–1320 | 1338–1347 |
+| | cuRAND Philox4x32-10 | 1215–1295 | 1295–1307 |
+| | CUDA.jl native | 1073–1100 | 1080–1116 |
+| Float64 | Tandem K=32 | 1347–1358 | 1374–1377 |
+| | CUDA.jl native | 1068–1083 | 1068–1101 |
+| | cuRAND Philox4x32-10 | 787–788 | 786–788 |
 
 At 2^27 the fixed launch and clock-ramp cost shows, which is why the two sizes differ.
 Chained scalar Float64 calls through the public A100 API reach about 597 GiB/s. These
@@ -173,7 +182,7 @@ fill is bound by integer throughput, not by memory.
 
 The [benchmark guide](https://github.com/tandem-rng/TandemRNG.jl/blob/main/benchmark/README.md)
 provides separate CPU, CUDA, Metal, and first-use runners. It compares Tandem with
-third-party generators only: Xoshiro, Random123, CUDA.jl, CURAND, and Metal.jl.
+third-party generators only: Xoshiro, Random123, CUDA.jl, cuRAND, and Metal.jl.
 It documents setup, supported types, timing protocols, and API precision differences.
 
 Use an idle host and repeated passes. Separate compilation, allocation, and first

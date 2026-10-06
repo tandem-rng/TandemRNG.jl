@@ -1,4 +1,5 @@
-# GPU benchmarks on one CUDA device: the fill against CUDA.jl's native generator and CURAND;
+# GPU benchmarks on one CUDA device: the fill against cuRAND's Philox4x32-10 and CUDA.jl's
+# native generators;
 # the `fill_lanes!` kernel over workgroup sizes; scalar Float64 chains in a kernel; and
 # in-kernel draws against Random123's Philox4x32-10 core in the same kernel shape. Random123
 # has no CUDA array-fill API, so its chains and core comparison use its stateless core.
@@ -22,11 +23,12 @@ using .KA: @kernel, @index
 const TYPES = (Float32, UInt32, Float64, Bool)
 # `CUDA.default_rng()` selects CUDA's GPUArrays generator. Its algorithm depends on the
 # CUDA version. `native_rng()` selects the distinct kernel generator of the cuRAND package.
+# The cuRAND library row uses its Philox4x32-10 generator, not its XORWOW default.
 const GENERATORS = (
     "TandemRNG K=32",
+    "cuRAND Philox4x32-10",
     "CUDA.jl native",
     "cuRAND NativeRNG",
-    "CURAND",
 )
 const CHUNK = 32
 
@@ -90,14 +92,14 @@ function generators(::Type{T}, A) where {T}
     tandem = TandemRNG.MLDataDevices.CUDADevice()(Tandem8x32{CHUNK}(1))
     native = CUDA.default_rng()
     kernel_rng = CUDA.CURAND.native_rng()
-    library = CUDA.CURAND.library_rng()
+    philox = CUDA.CURAND.LibraryRNG(CUDA.CURAND.CURAND_RNG_PSEUDO_PHILOX4_32_10)
     fills = Dict{String,Any}(
         "TandemRNG K=32" => () -> rand_fill!(tandem, A),
         "CUDA.jl native" => () -> Random.rand!(native, A),
         "cuRAND NativeRNG" => () -> Random.rand!(kernel_rng, A),
     )
-    # The CURAND library has no Bool generator.
-    T === Bool || (fills["CURAND"] = () -> Random.rand!(library, A))
+    # The cuRAND library has no Bool generator.
+    T === Bool || (fills["cuRAND Philox4x32-10"] = () -> Random.rand!(philox, A))
     return fills
 end
 

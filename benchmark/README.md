@@ -79,7 +79,7 @@ The public scalar report measures 1,024 draws per thread from bound RNG states.
 Its throughput counts generated Float64 bytes, not global-memory writes.
 The core report measures the library cores separately. Random123 has no GPU array-fill
 API, so it appears in the scalar and core comparisons through its stateless Philox4x32-10
-core. CURAND's library API has no Bool case.
+core. The fills use cuRAND's Philox4x32-10 library generator, which has no Bool case.
 
 ## Metal setup
 
