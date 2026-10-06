@@ -1,5 +1,6 @@
 # One-task fills of uniforms, normals, and exponentials against Xoshiro and Random123's
-# Philox4x32, and the multithreaded Tandem fills, for the tables of docs/src/performance.md:
+# Philox4x32, and the multithreaded `Stateful` fills against one Xoshiro or Philox4x32 per
+# task, for the tables of docs/src/performance.md:
 #
 #     julia --startup-file=no --threads=14 --project=benchmark benchmark/draws.jl [log2 n] [passes]
 #
@@ -26,7 +27,36 @@ function one_task(d, seed)
     )
 end
 
-many_tasks(d, seed) = (("Tandem Stateful", Stateful(seed), random(Val(d))),)
+# The references have no threaded fill, so each task fills its own contiguous chunk with its
+# own generator.
+struct PerTask{R}
+    rngs::Vector{R}
+end
+
+function per_task(fill)
+    return function (p::PerTask, A::Array)
+        n, len = length(p.rngs), length(A)
+        GC.@preserve A Threads.@sync for t = 1:n
+            lo, hi = div((t - 1) * len, n), div(t * len, n)
+            # An Array chunk keeps the references on their dense-array fill paths.
+            Threads.@spawn fill(p.rngs[t], unsafe_wrap(Array, pointer(A, lo + 1), hi - lo))
+        end
+        return A
+    end
+end
+
+function many_tasks(d, seed)
+    n = Threads.nthreads()
+    return (
+        ("Tandem Stateful", Stateful(seed), random(Val(d))),
+        ("Xoshiro", PerTask([Xoshiro(seed + t) for t = 1:n]), per_task(random(Val(d)))),
+        (
+            "Random123 Philox4x32",
+            PerTask([Random123.Philox4x(UInt32, (t, seed), 10) for t = 1:n]),
+            per_task(random(Val(d))),
+        ),
+    )
+end
 
 function rates(cases, A, passes)
     best = Dict{String,Float64}()
@@ -42,13 +72,14 @@ end
 
 function main(log2n = 22, passes = 3; threaded = true)
     println("# Julia $VERSION, $(Sys.CPU_NAME), $(Threads.nthreads()) threads, 2^$log2n elements")
-    println("draw\ttype\tgenerator\tGiB/s")
-    rows = Tuple{String,DataType,String,Float64}[]
+    println("draw\ttype\ttasks\tgenerator\tGiB/s")
+    rows = Tuple{String,DataType,Int,String,Float64}[]
     for d in DRAWS, T in (d === :rand ? (Float64, Float32, UInt32) : (Float64, Float32))
         A = Vector{T}(undef, 2^log2n)
-        groups = threaded ? (one_task(d, 42), many_tasks(d, 42)) : (one_task(d, 42),)
-        for cases in groups, (name, rate) in rates(cases, A, passes)
-            push!(rows, ("$(d)!", T, name, round(rate; digits = 2)))
+        groups = threaded ? ((1, one_task(d, 42)), (Threads.nthreads(), many_tasks(d, 42))) :
+            ((1, one_task(d, 42)),)
+        for (tasks, cases) in groups, (name, rate) in rates(cases, A, passes)
+            push!(rows, ("$(d)!", T, tasks, name, round(rate; digits = 2)))
             println(join(rows[end], '\t'))
         end
     end

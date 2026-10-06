@@ -44,7 +44,8 @@ Tandem and Xoshiro use 24/53 bits. These are API comparisons with different
 precision contracts, not claims of identical generator work.
 
 `draws.jl` measures one-task fills of uniforms, normals, and exponentials against Xoshiro and
-Random123's Philox4x32, and the multithreaded `Stateful` fills:
+Random123's Philox4x32. It also measures the multithreaded `Stateful` fills against one
+Xoshiro or Philox4x32 per task, each filling its own contiguous chunk:
 
 ```sh
 julia --startup-file=no --threads=14 --project=benchmark benchmark/draws.jl 22 3
@@ -84,6 +85,18 @@ The public scalar report measures 1,024 draws per thread from bound RNG states.
 Its throughput counts generated Float64 bytes, not global-memory writes.
 The core report measures the library cores separately. Random123 has no GPU array-fill
 API here, so it appears only in that core comparison. CURAND's library API has no Bool case.
+
+## Metal setup
+
+`metal/fills.jl` compares Tandem's fills on an Apple GPU with Metal.jl's own `rand!`, which
+draws these types from Metal Performance Shaders' Philox:
+
+```sh
+julia --startup-file=no --project=benchmark/metal -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate(); Pkg.precompile()'
+julia --startup-file=no --project=benchmark/metal benchmark/metal/fills.jl 3
+```
+
+Each case warms for 0.5 seconds and records the minimum of seven synchronized fills.
 
 ## First-use cost
 
