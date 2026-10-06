@@ -119,11 +119,10 @@ zero bytes.
 
 | generator | Float64 fill, GiB/s | Float32 fill, GiB/s | UInt32 fill, GiB/s |
 |---|---|---|---|
-| Tandem native | 7.65–7.66 | 10.70–10.72 | 14.75–14.76 |
-| Tandem bridge | 7.65–7.66 | 10.70–10.71 | 14.75–14.76 |
-| Random123 Philox4x32 | 0.77–0.77 | 0.68–0.68 | 0.72–0.72 |
-| Random123 Philox4x64 | 1.40–1.40 | 0.71–0.71 | 0.76–0.78 |
+| Tandem | 7.65–7.66 | 10.70–10.72 | 14.75–14.76 |
 | Xoshiro | 6.41–6.41 | 14.23–14.23 | 16.61–16.62 |
+| Random123 Philox4x64 | 1.40–1.40 | 0.71–0.71 | 0.76–0.78 |
+| Random123 Philox4x32 | 0.77–0.77 | 0.68–0.68 | 0.72–0.72 |
 
 Random123 1.7.1 supplies 23/52 random bits for these Float32/Float64 APIs; the other
 generators supply 24/53. This table predates the Float32 fill through the full-group loop.
