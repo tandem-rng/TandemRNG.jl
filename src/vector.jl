@@ -13,9 +13,35 @@ end
 
 const V16 = NTuple{16,VecElement{UInt32}}
 
-# High and low words of the eight 32x32 to 64-bit products, both unzipped from the one
-# widening product. A separate low multiply costs a vector multiply per word on NEON.
-@inline function _vmulwide(a::V8, b::V8)
+# High and low words of the eight 32x32 to 64-bit products.
+@static if Sys.ARCH === :x86_64
+    # AVX2 takes the high words from a widening product and the low words from vpmulld.
+    # Unzipping both from one eight-lane 64-bit product costs lane-crossing extends and
+    # permutes, which halved the fills on Zen 2.
+    @inline function _vmulwide(a::V8, b::V8)
+        hi = Base.llvmcall(
+            """
+            %a = zext <8 x i32> %0 to <8 x i64>
+            %b = zext <8 x i32> %1 to <8 x i64>
+            %p = mul <8 x i64> %a, %b
+            %s = lshr <8 x i64> %p, <i64 32, i64 32, i64 32, i64 32, i64 32, i64 32, i64 32, i64 32>
+            %r = trunc <8 x i64> %s to <8 x i32>
+            ret <8 x i32> %r""",
+            V8,
+            Tuple{V8,V8},
+            a,
+            b,
+        )
+        lo = Base.llvmcall("%r = mul <8 x i32> %0, %1\nret <8 x i32> %r", V8, Tuple{V8,V8}, a, b)
+        return hi, lo
+    end
+else
+    # Both halves unzip from one widening product. A separate low multiply costs a vector
+    # multiply per word on NEON.
+    @inline _vmulwide(a::V8, b::V8) = _vmulwide_unzip(a, b)
+end
+
+@inline function _vmulwide_unzip(a::V8, b::V8)
     p = Base.llvmcall(
         """
         %a = zext <8 x i32> %0 to <8 x i64>
@@ -67,10 +93,33 @@ end
 @inline _vrotate1(a::V8) = _vshuffle(a, a, Val((1, 2, 3, 4, 5, 6, 7, 0)))
 
 # Word-major row (word w of lanes 0 to 7) to memory order (lanes 0 to 7, each its four
-# words): a 4×4 transpose inside each 128-bit half, then a regrouping of the halves. Every
-# shuffle but the last stays inside the halves, which NEON registers and AVX2 unpacks do in
-# one instruction each. Output vector k holds blocks 2k and 2k + 1.
-@inline function _vtranspose(w0::V8, w1::V8, w2::V8, w3::V8)
+# words). Output vector k holds blocks 2k and 2k + 1.
+@static if Sys.ARCH === :x86_64
+    # Eight two-source shuffles. AVX2 lowers the regrouping of the version below to eight
+    # vpermq and four blends, which cost Zen 2 about 7 % of the fill.
+    @inline function _vtranspose(w0::V8, w1::V8, w2::V8, w3::V8)
+        lo = Val((0, 8, 1, 9, 2, 10, 3, 11))
+        hi = Val((4, 12, 5, 13, 6, 14, 7, 15))
+        p0 = _vshuffle(w0, w1, lo)
+        p1 = _vshuffle(w0, w1, hi)
+        q0 = _vshuffle(w2, w3, lo)
+        q1 = _vshuffle(w2, w3, hi)
+        pair_lo = Val((0, 1, 8, 9, 2, 3, 10, 11))
+        pair_hi = Val((4, 5, 12, 13, 6, 7, 14, 15))
+        return (
+            _vshuffle(p0, q0, pair_lo),
+            _vshuffle(p0, q0, pair_hi),
+            _vshuffle(p1, q1, pair_lo),
+            _vshuffle(p1, q1, pair_hi),
+        )
+    end
+else
+    # A 4×4 transpose inside each 128-bit half, then a regrouping of the halves. Every
+    # shuffle but the last stays inside the halves, one NEON instruction each.
+    @inline _vtranspose(w0::V8, w1::V8, w2::V8, w3::V8) = _vtranspose_halves(w0, w1, w2, w3)
+end
+
+@inline function _vtranspose_halves(w0::V8, w1::V8, w2::V8, w3::V8)
     zip_lo = Val((0, 8, 1, 9, 4, 12, 5, 13))
     zip_hi = Val((2, 10, 3, 11, 6, 14, 7, 15))
     t0 = _vshuffle(w0, w1, zip_lo)
