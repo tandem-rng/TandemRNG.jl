@@ -377,9 +377,24 @@ on the host, or inside a device kernel. Binding preserves the key and position.
 """
 @inline function rand_next(rng::Tandem8x32{K}, ::Type{T}) where {K,T<:ScalarTypes}
     nb = draw_bits(T)
+    # A Bool is always aligned. Its chain runs about a fifth faster on the general path.
+    nb == 1 && return _rand_next_general(rng, T)
     pos = rng.pos
-    # The position is the loop-carried chain of a draw loop, so the steady state must cost
-    # one add on it. Rounding up runs only when the previous draw left it misaligned, which
+    after = pos + UInt64(nb)
+    # Most draws start aligned and end inside the block, so they read the held block and
+    # change no state. One non-short-circuit test sends the others to the general path.
+    # With a separate alignment test, LLVM laid out the aligned case as a taken branch with
+    # state copies, and the 8- to 32-bit chains ran about 30 % slower.
+    if (pos & UInt64(nb - 1) != 0) | (after & UInt64(BLOCK_BITS - 1) == 0)
+        return _rand_next_general(rng, T)
+    end
+    return _element(T, _block(rng.o), pos), _rebuild(rng, after, rng.o, rng.h)
+end
+
+@inline function _rand_next_general(rng::Tandem8x32{K}, ::Type{T}) where {K,T}
+    nb = draw_bits(T)
+    pos = rng.pos
+    # Rounding up runs only when the previous draw left the position misaligned, which
     # happens once after a change of draw type. It may also push into the next block.
     if pos & UInt64(nb - 1) != 0
         pos = _align_up(pos, nb)
