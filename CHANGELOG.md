@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Float32 exponentials round to within 0.58 ulp, bit identical to tandem-c 1c75956 on the
+  CPU and in Metal kernels, so every uniform on the 2^-24 grid maps back to itself. This
+  changes Float32 exponential values. Uniforms, Float32 normals, Float64 exponentials and
+  positions are unchanged.
 - Scalar draws that start aligned and end inside their block take one branch. The 8- to
   32-bit scalar chains run about 40 % faster and the 64-bit chains about 10 % faster.
   Float64 fills on AArch64 convert with one fixed-point instruction. Values are unchanged.
