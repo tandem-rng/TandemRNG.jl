@@ -86,8 +86,10 @@ offset), so that the pairs fall the same way. Only the last range may have odd l
 ## Exponentials
 
 [`exponential_next`](@ref) and [`exponential_fill!`](@ref) return `−log(1 − u)` for one
-uniform draw `u` of the output type, with the polynomial `log` of the normals. A fill
-consumes one uniform per element, and element 1 equals the scalar draw.
+uniform draw `u` of the output type. Float64 uses the polynomial `log` of the normals.
+Float32 carries the leading term in two floats and adds `k log 2` by an exact two-sum, within
+0.58 ulp, as tandem-c does. A fill consumes one uniform per element, and element 1 equals the
+scalar draw.
 
 ## Weighted choice
 
@@ -107,10 +109,12 @@ PureRNGs distribution draws do not follow Appendix A.
 
 ## Tests
 
-`test/derived.jl` checks the values against copies of tandem-c's `cross_below.h`,
-`cross_normal.h`, and `cross_exponential.h`, tandem-cuda's `cross_fill_below.h` and
-`cross_fill_exponential.h`, and the SHA-256 of tandem-c's 1e6-element normal and
-exponential dumps. The `cross_normal.h` rows put a wedge accept, a wedge reject and a tail
+`test/derived.jl` checks the values against copies of tandem-c's `cross_below.h` and
+`cross_normal.h`, tandem-cuda's `cross_fill_below.h` and `cross_fill_exponential.h`, the
+latter generated from tandem-cuda e98daee's core, the spec's `conformance/exponential.json`, and the SHA-256 of
+tandem-c's 1e6-element normal dump. The exponential dump matches the SHA-256 and FNV-1a of
+the spec's `conformance/hashes.json`. `test/metal` checks Float32 exponentials drawn in Metal
+kernels against the CPU fill. The `cross_normal.h` rows put a wedge accept, a wedge reject and a tail
 at unaligned starts. The normals also match the FNV-1a hashes of tandem-c's
 `test_normal_bits.c`, including the spec's Python implementation of Appendix A. Normals and
 exponentials pass moment and Kolmogorov-Smirnov tests on 1e7 draws. `test/choice.jl`

@@ -4,6 +4,8 @@
 
 include("fixtures.jl")
 
+using JSON
+
 # The C fixtures start from seed 42 after one Bool draw, at bit position 1.
 after_bool(seed) = rand_next(Tandem8x32(seed), Bool)[2]
 
@@ -18,19 +20,23 @@ function scalar_draws(f, rng, count)
 end
 
 @testset "fixture files" begin
-    # Byte identical to tandem-c b049384 (cross_below.h, cross_exponential.h), tandem-c
-    # 121db59 (cross_normal.h) and tandem-cuda c5c5725 (cross_fill_below.h,
-    # cross_fill_exponential.h).
+    # Byte identical to tandem-c b049384 (cross_below.h), tandem-c 121db59 (cross_normal.h),
+    # tandem-cuda c5c5725 (cross_fill_below.h) and tandem-spec 2a4bd08
+    # (conformance/exponential.json, conformance/hashes.json). tandem-cuda dropped
+    # cross_fill_exponential.h in 0f7120a, so this copy is the output of c5c5725's
+    # tools/gen_cross_fill_exponential.cpp built against e98daee's include/tandem/core.hpp.
     @test fixture_sha256("cross_below.h") ==
           "0119fa58cc98d2da41d140408aaab57264166c73dc5ab22c1b0b725e282ae8f1"
     @test fixture_sha256("cross_fill_below.h") ==
           "d6d7a9dfcb42d02746e58ff99325c07fd4280f88fa59fcd780a200f65f8814bc"
     @test fixture_sha256("cross_normal.h") ==
           "3cd7c8f9178711255718288eb712eaccb33a1726d2a185f412f13590398ad3ac"
-    @test fixture_sha256("cross_exponential.h") ==
-          "da848bae24dae7d1cde6fdb7ef2e6d2953b76b333ba5139800cba3ae03c85efc"
+    @test fixture_sha256("exponential.json") ==
+          "356ae6b6021bdde0aab85474a50ee7a73edfcc2ecdac3d14f4e25c4b993605bd"
+    @test fixture_sha256("hashes.json") ==
+          "248d1d1a6ffdee023369ab34c58c20e48e71a06ab3daedc3624d8cab545bcd1b"
     @test fixture_sha256("cross_fill_exponential.h") ==
-          "2a65543dbf94486201ca9310d1ffe328393ca60ab2c53aea8022d5ba739de7b0"
+          "e4e5017691aeca8b5668e8a765d459ac40765f23a4d52ef185c25c6b86a2ebf7"
 end
 
 @testset "bounded: scalar draws equal tandem-c" begin
@@ -208,19 +214,20 @@ end
 end
 
 @testset "exponentials equal tandem-c bit for bit" begin
-    text = fixture_text("cross_exponential.h")
-    key = rngkey(Tandem8x32(42))
-    for (T, name) in ((Float64, "CROSS_EXPONENTIAL"), (Float32, "CROSS_EXPONENTIALF"))
-        for row in c_initializer(text, name)
-            rng = Tandem8x32(key, parse(Int, row[1]))
-            want = parse.(T, row[2])
-            A = Vector{T}(undef, length(want))
-            @test rngposition(exponential_fill!(rng, A)) == parse(UInt64, row[3])
-            @test A == want
-        end
+    # The spec's conformance/exponential.json, bit for bit even where it allows a tolerance,
+    # since this package copies tandem-c's logarithms.
+    hexkey(c) = Tuple(parse.(UInt32, c["key"]; base = 16))
+    for c in JSON.parsefile(joinpath(FIXTURES, "exponential.json"))["cases"]
+        T = c["kind"] == "fill_exponential_f64" ? Float64 : Float32
+        U = T === Float64 ? UInt64 : UInt32
+        rng = Tandem8x32{c["K"]}(hexkey(c), c["start"])
+        A = Vector{T}(undef, c["n"])
+        @test rngposition(exponential_fill!(rng, A)) == c["end"]
+        @test reinterpret(U, A) == parse.(U, c["values"]; base = 16)
     end
-    # tandem-cuda's host and device fills, the same key, at unaligned starts.
+    # tandem-cuda e98daee's core, the same key, at unaligned starts.
     text = fixture_text("cross_fill_exponential.h")
+    key = rngkey(Tandem8x32(42))
     for (T, name) in ((Float64, "CROSS_EXP64"), (Float32, "CROSS_EXP32"))
         for row in c_initializer(text, name)
             want = parse.(T, row[3])
@@ -230,20 +237,25 @@ end
             @test A == want
         end
     end
-    # tandem-c tools/dump_exponentials.c: seed (2026, 7), 1e6 f64 then 1e6 f32 exponentials
-    # from one generator at each start.
+    # tandem-c tools/dump_exponentials.c as conformance/hashes.json describes it: 1e6 f64 then
+    # 1e6 f32 exponentials from one generator at each start.
+    dump = only(filter(d -> d["id"] == "tools/dump_exponentials.c",
+        JSON.parsefile(joinpath(FIXTURES, "hashes.json"))["dumps"]))
     ctx = SHA.SHA256_CTX()
+    fnv = 0xcbf29ce484222325
     d = Vector{Float64}(undef, 1_000_000)
     f = Vector{Float32}(undef, 1_000_000)
-    for start in (0, 1, 77, 12345, 1 << 30)
-        rng = Tandem8x32(rngkey(Tandem8x32(2026 + UInt128(7) << 64)), start)
+    for start in dump["starts"]
+        rng = Tandem8x32{dump["K"]}(hexkey(dump), start)
         rng = exponential_fill!(rng, d)
-        SHA.update!(ctx, reinterpret(UInt8, d))
         exponential_fill!(rng, f)
-        SHA.update!(ctx, reinterpret(UInt8, f))
+        for bytes in (reinterpret(UInt8, d), reinterpret(UInt8, f))
+            SHA.update!(ctx, bytes)
+            fnv = foldl((h, b) -> (h ⊻ b) * 0x00000100000001b3, bytes; init = fnv)
+        end
     end
-    @test bytes2hex(SHA.digest!(ctx)) ==
-          "5c035a4ef1368231d25a9c2f9201be2df3224e28a14549a50625d0db3770ef4e"
+    @test bytes2hex(SHA.digest!(ctx)) == dump["sha256"]
+    @test string(fnv; base = 16, pad = 16) == dump["fnv1a"]
 end
 
 @testset "Float32 normals and exponentials: draw consumption and decomposition" begin

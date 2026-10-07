@@ -182,7 +182,8 @@ end
 
 # --- normals and exponentials ----------------------------------------------------------------
 
-# -2 ln x for x in (0, 1], the logarithm of the normals and the exponentials, as tandem-c.
+# -2 ln x for x in (0, 1], the logarithm of the normals and the Float64 exponentials, as
+# tandem-c.
 # x = mant·2^k with mant in [sqrt(1/2), sqrt(2)): adding the bits of sqrt(1/2) to the
 # exponent field makes the mantissa rollover pick k. Then ln mant = 2s(1 + z/3 + z²/5 + …)
 # with s = (mant − 1)/(mant + 1) and z = s², and ln 2 is split so that nk·ln2_hi is exact.
@@ -246,8 +247,34 @@ end
     return r * c, r * s
 end
 
+# −ln x for x in (0, 1], the Float32 exponentials, within 0.58 ulp for every 1 − x on the
+# 2^−24 grid, as tandem-c's neg_log_f32. An error near 1 ulp moves 1 − exp(−ln x) to a
+# neighbouring grid point, so the leading term u = (2 − 2m)/(m + 1) = −2s is carried as
+# uh + r/d: m + 1 = d + dl exactly, and r is the residual of uh. nk·ln2_hi + uh splits exactly
+# by fast two-sum, because nk·ln2_hi is exact and either 0 or larger than |uh|. uh rounds in an
+# fma, so that no contraction feeds the unrounded num·rcp to the two-sum. The tail u³q(u²) is
+# a minimax fit to 2 atanh(u/2) − u.
+@inline function _neg_log(x::Float32)
+    ix = reinterpret(UInt32, x) + 0x004afb0d
+    nk = Float32(Int32(127) - (ix >> 23) % Int32)
+    mant = reinterpret(Float32, (ix & 0x007fffff) + 0x3f3504f3)
+    num = fma(mant, -2.0f0, 2.0f0)
+    d = mant + 1.0f0
+    dl = mant - (d - 1.0f0)
+    rcp = 1.0f0 / d
+    uh = fma(num, rcp, 0.0f0)
+    r = fma(-uh, dl, fma(-uh, d, num))
+    v = uh * uh
+    q = fma(v, fma(v, 0.0023109776f0, 0.012496489f0), 0.08333336f0)
+    a = nk * 0.693145751953125f0
+    hi = a + uh
+    e = uh - (hi - a)
+    return hi + fma(uh * v, q, fma(r, rcp, fma(nk, 1.428606765330187f-6, e)))
+end
+
 # Halving −2 ln is exact.
-@inline _exponential(u::T) where {T<:Union{Float32,Float64}} = T(0.5) * _neg2_log(one(T) - u)
+@inline _exponential(u::Float64) = 0.5 * _neg2_log(1.0 - u)
+@inline _exponential(u::Float32) = _neg_log(1.0f0 - u)
 
 const NormalTypes = Union{Float32,Float64}
 
