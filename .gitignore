@@ -7,6 +7,7 @@
 /docs/build/
 /benchmark/Manifest*.toml
 /test/cuda/Manifest*.toml
+/test/metal/Manifest*.toml
 /test/Manifest*.toml
 /test/reactant/Manifest*.toml
 /test/purerngs/Manifest*.toml
