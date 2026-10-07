@@ -7,9 +7,9 @@ using JSON
 hex(T, s) = parse(T, s; base = 16)
 
 @testset "choice: conformance cases" begin
-    # Byte identical to tandem-spec f420545 conformance/choice.json.
+    # Byte identical to tandem-spec 2a4bd08 conformance/choice.json.
     @test fixture_sha256("choice.json") ==
-          "e0e2e8d5715bb726a40ec0da9a0c283b5221f6322ef65699c59e71f7bce27646"
+          "53e54b9bcd73a7ac9b355e9d09b74b922f6bbea73c825c9b098ff7a144435801"
     cases = JSON.parsefile(joinpath(FIXTURES, "choice.json"))["cases"]
     @test count(c -> haskey(c, "cut"), cases) == 5
     for c in cases
