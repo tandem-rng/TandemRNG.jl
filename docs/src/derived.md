@@ -110,8 +110,8 @@ PureRNGs distribution draws do not follow Appendix A.
 ## Tests
 
 `test/derived.jl` checks the values against copies of tandem-c's `cross_below.h` and
-`cross_normal.h`, tandem-cuda's `cross_fill_below.h` and the Float64 rows of
-`cross_fill_exponential.h`, the spec's `conformance/exponential.json`, and the SHA-256 of
+`cross_normal.h`, tandem-cuda's `cross_fill_below.h` and `cross_fill_exponential.h`, the
+latter generated from tandem-cuda e98daee's core, the spec's `conformance/exponential.json`, and the SHA-256 of
 tandem-c's 1e6-element normal dump. The exponential dump matches the SHA-256 and FNV-1a of
 the spec's `conformance/hashes.json`. `test/metal` checks Float32 exponentials drawn in Metal
 kernels against the CPU fill. The `cross_normal.h` rows put a wedge accept, a wedge reject and a tail

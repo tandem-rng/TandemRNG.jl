@@ -21,8 +21,10 @@ end
 
 @testset "fixture files" begin
     # Byte identical to tandem-c b049384 (cross_below.h), tandem-c 121db59 (cross_normal.h),
-    # tandem-cuda c5c5725 (cross_fill_below.h, cross_fill_exponential.h) and tandem-spec
-    # 2a4bd08 (conformance/exponential.json, conformance/hashes.json).
+    # tandem-cuda c5c5725 (cross_fill_below.h) and tandem-spec 2a4bd08
+    # (conformance/exponential.json, conformance/hashes.json). tandem-cuda dropped
+    # cross_fill_exponential.h in 0f7120a, so this copy is the output of c5c5725's
+    # tools/gen_cross_fill_exponential.cpp built against e98daee's include/tandem/core.hpp.
     @test fixture_sha256("cross_below.h") ==
           "0119fa58cc98d2da41d140408aaab57264166c73dc5ab22c1b0b725e282ae8f1"
     @test fixture_sha256("cross_fill_below.h") ==
@@ -34,7 +36,7 @@ end
     @test fixture_sha256("hashes.json") ==
           "248d1d1a6ffdee023369ab34c58c20e48e71a06ab3daedc3624d8cab545bcd1b"
     @test fixture_sha256("cross_fill_exponential.h") ==
-          "2a65543dbf94486201ca9310d1ffe328393ca60ab2c53aea8022d5ba739de7b0"
+          "e4e5017691aeca8b5668e8a765d459ac40765f23a4d52ef185c25c6b86a2ebf7"
 end
 
 @testset "bounded: scalar draws equal tandem-c" begin
@@ -223,15 +225,17 @@ end
         @test rngposition(exponential_fill!(rng, A)) == c["end"]
         @test reinterpret(U, A) == parse.(U, c["values"]; base = 16)
     end
-    # tandem-cuda's host and device fills, the same key, at unaligned starts. Its c5c5725
-    # predates the Float32 exponential of tandem-c 9cf9948, so only the Float64 rows apply.
+    # tandem-cuda e98daee's core, the same key, at unaligned starts.
+    text = fixture_text("cross_fill_exponential.h")
     key = rngkey(Tandem8x32(42))
-    for row in c_initializer(fixture_text("cross_fill_exponential.h"), "CROSS_EXP64")
-        want = parse.(Float64, row[3])
-        @test length(want) == parse(Int, row[2])
-        A = Vector{Float64}(undef, length(want))
-        exponential_fill!(Tandem8x32(key, parse(Int, row[1])), A)
-        @test A == want
+    for (T, name) in ((Float64, "CROSS_EXP64"), (Float32, "CROSS_EXP32"))
+        for row in c_initializer(text, name)
+            want = parse.(T, row[3])
+            @test length(want) == parse(Int, row[2])
+            A = Vector{T}(undef, length(want))
+            exponential_fill!(Tandem8x32(key, parse(Int, row[1])), A)
+            @test A == want
+        end
     end
     # tandem-c tools/dump_exponentials.c as conformance/hashes.json describes it: 1e6 f64 then
     # 1e6 f32 exponentials from one generator at each start.
