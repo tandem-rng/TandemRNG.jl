@@ -18,7 +18,7 @@ makedocs(;
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", "false") == "true",
         repolink = "https://github.com/tandem-rng/TandemRNG.jl",
-        canonical = "https://bjmcox.github.io/TandemRNG.jl/",
+        canonical = "https://tandem-rng.github.io/TandemRNG.jl/",
         edit_link = "main",
     ),
     pages = [
