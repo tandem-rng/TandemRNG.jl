@@ -4,7 +4,7 @@
 
 [![Build Status](https://github.com/tandem-rng/TandemRNG.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/tandem-rng/TandemRNG.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/tandem-rng/TandemRNG.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/tandem-rng/TandemRNG.jl)
-[![Documentation](https://img.shields.io/badge/docs-guide-blue.svg)](https://bjmcox.github.io/TandemRNG.jl/)
+[![Documentation](https://img.shields.io/badge/docs-guide-blue.svg)](https://tandem-rng.github.io/TandemRNG.jl/)
 [![Julia 1.10+](https://img.shields.io/badge/Julia-1.10%2B-9558B2?logo=julia)](https://julialang.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
@@ -34,10 +34,10 @@ z, rng = normal_next(rng)               # ziggurat, bit identical to tandem-c
 i, rng = choice_next(rng, ChoiceTable([1, 2, 3, 4]))   # weighted index, alias table
 ```
 
-The [documentation](https://bjmcox.github.io/TandemRNG.jl/) covers derived draws, devices,
+The [documentation](https://tandem-rng.github.io/TandemRNG.jl/) covers derived draws, devices,
 integrations, speed, and the [validation evidence](https://github.com/tandem-rng/TandemRNG.jl/releases/tag/statistical-evidence-2026-09-27).
 [`benchmark/README.md`](benchmark/README.md) reproduces the measurements.
 
 Portions of the code were generated with the assistance of LLMs.
 
-[Documentation](https://bjmcox.github.io/TandemRNG.jl/) · [Apache 2.0 license](LICENSE) · [Issues](https://github.com/tandem-rng/TandemRNG.jl/issues)
+[Documentation](https://tandem-rng.github.io/TandemRNG.jl/) · [Apache 2.0 license](LICENSE) · [Issues](https://github.com/tandem-rng/TandemRNG.jl/issues)
