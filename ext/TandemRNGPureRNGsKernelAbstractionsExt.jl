@@ -220,6 +220,8 @@ end
         end
     end
     @synchronize
+    # Metal can miscompile the lane index carried across this barrier.
+    thread = @index(Local, Linear)
     for draw = (first+thread):L:last
         position = start + UInt64(draw - 1) * UInt64(C * S)
         cursor = _TileCursor(words, position, origin, Val(S))
