@@ -1,6 +1,6 @@
 @setup_workload let
     types = Base.uniontypes(DrawTypes)
-    # Two groups at K=64 also exercise the joined task path with a small allocation.
+    # Two groups at K=64 exercise group boundaries with a small allocation.
     arrays = map(T -> Vector{T}(undef, 2 * 1024 * 64 ÷ draw_bits(T) + 3), types)
     @compile_workload begin
         for power = 0:16
