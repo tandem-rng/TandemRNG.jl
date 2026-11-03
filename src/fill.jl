@@ -34,7 +34,8 @@ end
 Fill `A` with values of type `T` and return the advanced generator. `T` is one of the draw
 types of [`rand_next`](@ref). The destination backend must match the generator's binding,
 including for empty arrays. Groups of eight chunks are distributed over `nthreads` tasks
-when there are enough of them, and the result does not depend on the thread count.
+when the fill spans at least 64 KiB of stream output. The result does not depend on the thread count.
+`nthreads` is an upper bound; small fills run serially.
 
 On a GPU array (with KernelAbstractions and GPUArraysCore loaded) the fill is queued on the
 array's device like other array operations and the call returns before it completes.
@@ -61,7 +62,7 @@ function rand_fill!(
     bits_per_group = UInt64(ROW_BITS) * UInt64(K)
     g0 = p0 ÷ bits_per_group
     g1 = (pend - 1) ÷ bits_per_group
-    nt = min(Int(nthreads), Int(g1 - g0 + 1))
+    nt = pend - p0 < 8 * 65536 ? 1 : min(Int(nthreads), Int(g1 - g0 + 1))
     if nt <= 1
         for g = g0:g1
             _fill_group!(A, rng.key, g, p0, pend, Val(K))

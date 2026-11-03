@@ -149,11 +149,11 @@ end
 @testset "fill: thread invariance" begin
     rng = Tandem8x32{16}(9)
     _, rng = rand_next(rng, UInt32)   # start mid-block
-    n = 3 * 512 + 7                   # three groups of Float32 and a partial block
+    n = 3 * 16384 + 7                 # enough work for three tasks and a partial block
     A = Vector{Float32}(undef, n)
     B = Vector{Float32}(undef, n)
     ra = rand_fill!(rng, A; nthreads = 1)
-    # Four groups split across three tasks also exercise unequal contiguous ranges.
+    # The groups split across three tasks with unequal contiguous ranges.
     rb = rand_fill!(rng, B; nthreads = 3)
     @test A == B
     @test rngposition(ra) == rngposition(rb)
