@@ -35,6 +35,15 @@ Loading both packages enables TandemRNG's PureRNGs extension, which requires
 PureRNGs 0.0.2. PureRNGs 0.0.1 lacks the external wrapper hook.
 Use qualified names to avoid conflicts between their exported functions.
 
+An unregistered PureRNGs development version works too. Install it by URL:
+
+```julia
+using Pkg
+Pkg.add(url = "https://github.com/BJMCox/PureRNGs.jl", rev = "dev")
+```
+
+The extension's conformance project pins a commit from that branch for CI.
+
 ```julia
 import PureRNGs, TandemRNG
 rng = TandemRNG.Tandem8x32(42)
