@@ -2,18 +2,19 @@
 
 Use Julia 1.13 or later with the `TandemRNG.jl` checkout.
 TandemRNG owns the bridge. PureRNGs needs no Tandem-specific extension.
-`Project.toml` pins a PureRNGs `dev` commit by URL and uses the local Tandem source.
+`Project.toml` tracks PureRNGs' `dev` branch by URL and uses the local Tandem source.
 No PureRNGs registration or release is required. The CPU CI job uses this project.
+CI refreshes PureRNGs before testing, so it tests the latest `dev` head.
 
 From the TandemRNG root, run:
 
 ```sh
-julia --project=test/purerngs -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+julia --project=test/purerngs -e 'using Pkg; Pkg.instantiate(); Pkg.update("PureRNGs"); Pkg.test()'
 ```
 
 To test a local PureRNGs checkout instead, run `Pkg.develop(path = "/path/to/PureRNGs.jl")`
 in this test project before testing. Restore the URL source in `Project.toml` and
-remove the local manifest to return to the CI pin.
+remove the local manifest to return to `dev` tracking.
 
 The default suite checks the CPU bridge, sampler engine contract, checked spans,
 ForwardDiff rules, and Reactant on its CPU backend. The engine tests compare

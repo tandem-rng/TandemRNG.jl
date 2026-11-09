@@ -76,8 +76,8 @@ jobs:
         with:
           version: '1'
       - uses: julia-actions/cache@v3
-      - name: Test the pinned PureRNGs extension
-        run: julia --startup-file=no --project=test/purerngs -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+      - name: Test the latest PureRNGs dev
+        run: julia --startup-file=no --project=test/purerngs -e 'using Pkg; Pkg.instantiate(); Pkg.update("PureRNGs"); Pkg.test()'
   zig-tables:
     name: ziggurat tables are current
     runs-on: ubuntu-latest

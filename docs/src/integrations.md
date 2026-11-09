@@ -42,7 +42,8 @@ using Pkg
 Pkg.add(url = "https://github.com/BJMCox/PureRNGs.jl", rev = "dev")
 ```
 
-The extension's conformance project pins a commit from that branch for CI.
+The extension's conformance project tracks that branch. CI updates PureRNGs to
+the latest `dev` head before testing.
 
 ```julia
 import PureRNGs, TandemRNG
