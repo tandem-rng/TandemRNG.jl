@@ -22,6 +22,11 @@ chunk_length
 rand_next
 rand_at
 rand_fill!
+rand_next!
+randn_next
+randn_next!
+randexp_next
+randexp_next!
 ```
 
 ## Derived draws
@@ -50,4 +55,5 @@ subrng
 
 ```@docs
 Stateful
+StatefulRNG
 ```

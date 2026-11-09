@@ -19,8 +19,9 @@ st = Stateful(rng)
 ## Bounded integers
 
 [`rand_next`](@ref) and [`rand_fill!`](@ref) take an integer range. `Stateful` gives
-the same values through `rand(st, r)`, `rand!(st, A, r)`, and every sampler that picks
-an index range, such as `rand(st, collection)`.
+the same values through `rand(st, r)` and `rand!(st, A, r)` for supported unit
+ranges. Julia's collection and non-unit-range samplers can use other algorithms,
+so their stream consumption need not equal a native bounded draw.
 
 - Draws use Lemire's multiply-and-reject method on uniform `w`-bit draws.
 - The width comes from the number of values `m = length(r)`: `w = 32` when `m ≤ 2^32`,

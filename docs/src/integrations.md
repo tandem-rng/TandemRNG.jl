@@ -4,9 +4,9 @@
 
 [`Stateful`](@ref) implements `Random.AbstractRNG`. It supports `rand`, `rand!`,
 `randn`, `randexp`, ranges, and samplers built on the standard primitive draw methods.
-Integer ranges, collections, `randn`, and `randexp` for Float32 and Float64 follow the
-[derived draws](derived.md) of the specification, so they equal the immutable draws
-and the other Tandem ports.
+Integer unit ranges and `randn`/`randexp` for Float32 and Float64 follow the
+[derived draws](derived.md) of the specification. Julia's other collection and
+range samplers retain their own algorithms and consumption rules.
 
 ```@example random
 using TandemRNG, Random
@@ -19,7 +19,9 @@ immutable_rng = parent(rng)
 ```
 
 `Stateful()` obtains a seed from `RandomDevice`. `Stateful{K}(seed)` selects the
-chunk length. `copy(rng)` duplicates the stream, and `Random.seed!(rng, seed)` resets it.
+chunk length. `StatefulRNG` aliases `Stateful`. `copy(rng)` duplicates the stream,
+`copy!(destination, source)` copies its state, and `Random.seed!(rng, seed)` resets it.
+No-argument, `nothing`, and `RandomDevice` reseeding obtain a fresh seed from the OS.
 `parent(rng)` and `Tandem8x32(rng)` recover the current immutable CPU generator.
 Constructing a wrapper from a device-bound generator explicitly binds it to the CPU.
 
@@ -29,7 +31,8 @@ need not retain identical output across Julia versions.
 
 ## PureRNGs
 
-Loading both packages enables TandemRNG's PureRNGs extension.
+Loading both packages enables TandemRNG's PureRNGs extension, which requires
+PureRNGs 0.0.2. PureRNGs 0.0.1 lacks the external wrapper hook.
 Use qualified names to avoid conflicts between their exported functions.
 
 ```julia
@@ -50,13 +53,28 @@ stateful = PureRNGs.StatefulRNG(rng)
 | `rand_next(rng, distribution, ...)` | Distribution draws using PureRNGs' samplers |
 | `rngkey`, `rngposition` | Current immutable state |
 | `splitrng`, `subrng` | Child derivations with the same stream rules |
-| `StatefulRNG` | A CPU-bound `TandemRNG.Stateful` |
+| `StatefulRNG` | A CPU-bound PureRNGs wrapper using PureRNGs' sampler laws |
+| `randgen!!`, `randset!!`, and their primitive variants | Pure continuations or mutable draws with PureRNGs' storage rules |
+
+`PureRNGs.rand_next(rng, (2, 3))` samples the tuple as a population. Earlier
+Tandem extensions treated that tuple as dimensions. Use
+`PureRNGs.rand_next(rng, Float64, (2, 3))` for a matrix. Native
+`TandemRNG.rand_next(rng, (2, 3))` retains its dimension shorthand.
+
+The PureRNGs wrapper follows `PureRNGs.randn_next` and `randexp_next`, including
+their result types and bit consumption. `TandemRNG.Stateful` keeps the native
+Appendix A transforms. Loading PureRNGs does not change the native wrapper.
+The PureRNGs wrapper also preserves pure uniform fills, including `BitArray`
+bit order and position. Other collection and permutation methods use Julia's
+generic `Random` samplers unless Tandem supplies a bridge method.
 
 The bridge preserves alignment, final positions, allocation backend, and residence
-checks. Bind with MLDataDevices before array calls. Destination fills and
+checks. Bind with MLDataDevices before array calls. Allocating draws, destination fills and
 `splitrng(rng, n)` default to `threaded = false`, matching PureRNGs. Pass
 `threaded = true` to enable CPU threading. Native `rand_fill!` returns only the
-generator.
+generator. The native `rand_next!`, `randn_next!`, and `randexp_next!` aliases
+return `(destination, next_rng)` and default to serial fills. Native `randn_next`
+and `randexp_next` name the existing native normal and exponential draws.
 
 Load Distributions to use its supported samplers through PureRNGs:
 
@@ -70,7 +88,8 @@ columns, rng = PureRNGs.rand_next(rng, Dirichlet([0.2, 1.0, 3.0]), 16)
 PureRNGs owns the sampler mathematics and differentiation rules. Tandem supplies
 bits through its native row generator. Normal, exponential, mapped univariate,
 Gamma-family, MvNormal, and Dirichlet draws use this interface. Categorical,
-collection sampling, and range sampling retain PureRNGs' built-in generator APIs.
+general collection sampling, and range sampling retain PureRNGs' built-in generator APIs.
+Scalar tuple picks use Tandem's bounded integer draw.
 
 Each sampler take uses one aligned Tandem slot: one bit for a one-bit take,
 otherwise the smallest of 8, 16, 32, and 64 bits that holds it. The sampler reads

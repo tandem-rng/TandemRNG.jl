@@ -34,3 +34,38 @@
     @test chunk_length(Tandem8x32(st2)) == 8
     @test copy(st2) == st2 && copy(st2) !== st2
 end
+
+@testset "Random API: default derived draws" begin
+    st = Stateful(42)
+    expected, pure = normal_next(Tandem8x32(42))
+    @test randn(st) == expected
+    @test parent(st) == pure
+    expected, pure = exponential_next(pure)
+    @test randexp(st) == expected
+    @test parent(st) == pure
+end
+
+@testset "Random API: copying and reseeding" begin
+    source = Stateful{8}(42)
+    rand(source, UInt64, 40)
+    pure = parent(source)
+    destination = Stateful{8}(99)
+    @test copy!(destination, source) === destination
+    @test parent(destination) == pure
+    expected, pure = rand_next(pure, UInt32)
+    @test rand(destination, UInt32) == expected
+    Random.seed!(source, 7)
+    expected, pure = rand_next(pure, Float64)
+    @test rand(destination) == expected
+    @test parent(destination) == pure
+
+    for seed_args in ((), (nothing,), (Random.RandomDevice(),))
+        @test Random.seed!(destination, seed_args...) === destination
+        pure = parent(destination)
+        @test chunk_length(pure) == 8
+        @test rngposition(pure) == 0
+        expected, pure = rand_next(pure, UInt64)
+        @test rand(destination, UInt64) == expected
+        @test parent(destination) == pure
+    end
+end

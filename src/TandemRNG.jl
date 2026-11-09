@@ -12,8 +12,9 @@ using Random
 import MLDataDevices
 using PrecompileTools: @setup_workload, @compile_workload
 
-export Tandem8x32, Stateful
-export rand_next, rand_at, rand_fill!
+export Tandem8x32, Stateful, StatefulRNG
+export rand_next, rand_next!, rand_at, rand_fill!
+export randn_next, randn_next!, randexp_next, randexp_next!
 export rand_below_next, rand_below_fill!
 export normal_next, normal_fill!, exponential_next, exponential_fill!
 export ChoiceTable, choice_next, choice_fill!
@@ -35,6 +36,7 @@ include("zig_tables.jl")
 include("derived.jl")
 include("choice.jl")
 include("random.jl")
+include("continuations.jl")
 include("precompile.jl")
 
 end

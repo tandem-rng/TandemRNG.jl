@@ -423,16 +423,28 @@ end
 The `i`-th value (1-based) of `rand_fill!(rng, Vector{T}(undef, n))` without advancing
 `rng`. Each real component costs one F plus at most `K` steps of T. Use this for
 addressed draws; use `rand_next` or `rand_fill!` for sequential draws.
+The complete addressed span must fit without wrapping the stream position.
 """
 function rand_at(rng::Tandem8x32{K}, ::Type{T}, i::Integer) where {K,T<:ScalarTypes}
-    i >= 1 || throw(ArgumentError("index must be at least 1"))
     nb = draw_bits(T)
-    p = _align_up(rng.pos, nb) + UInt64(nb) * (UInt64(i) - 1)
+    p = _uniform_address(rng.pos, nb, 1, i)
     return _element(T, _block_at(rng.key, p, K), p)
 end
 
-function rand_at(rng::Tandem8x32, ::Type{Complex{T}}, i::Integer) where {T<:FloatTypes}
+function _uniform_address(pos::UInt64, nb::Int, components::Int, i::Integer)
     i >= 1 || throw(ArgumentError("index must be at least 1"))
-    j = 2 * (UInt64(i) - 1)
-    return Complex{T}(rand_at(rng, T, j + 1), rand_at(rng, T, j + 2))
+    p0 = _align_up(pos, nb)
+    width = UInt64(nb * components)
+    p0 >= pos && i <= (typemax(UInt64) - p0) ÷ width ||
+        throw(ArgumentError("addressed draw passes the end of the stream"))
+    return p0 + width * (UInt64(i) - 1)
+end
+
+function rand_at(rng::Tandem8x32{K}, ::Type{Complex{T}}, i::Integer) where {K,T<:FloatTypes}
+    nb = draw_bits(T)
+    p = _uniform_address(rng.pos, nb, 2, i)
+    re = _element(T, _block_at(rng.key, p, K), p)
+    p += UInt64(nb)
+    im = _element(T, _block_at(rng.key, p, K), p)
+    return Complex{T}(re, im)
 end
