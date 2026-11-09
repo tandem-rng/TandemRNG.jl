@@ -38,6 +38,12 @@ Stateful() = Stateful(rand(Random.RandomDevice(), UInt128))
 Tandem8x32(r::Stateful) = _advance(r.value, r.pos)
 
 Base.copy(r::Stateful) = Stateful(r.value, r.pos)
+function Base.copy!(destination::Stateful{K}, source::Stateful{K}) where {K}
+    destination.value = source.value
+    destination.pos = source.pos
+    copyto!(destination.row, source.row)
+    return destination
+end
 Base.:(==)(a::Stateful, b::Stateful) = Tandem8x32(a) == Tandem8x32(b)
 Base.hash(r::Stateful, h::UInt) = hash(Tandem8x32(r), hash(:TandemStateful, h))
 
@@ -182,6 +188,9 @@ end
     return _box_muller(a, _draw!(r, Float32))[1]
 end
 
+@inline Random.randn(r::Stateful) = Random.randn(r, Float64)
+@inline Random.randexp(r::Stateful) = Random.randexp(r, Float64)
+
 for T in (Float32, Float64)
     @eval begin
         @inline Random.randexp(r::Stateful, ::Type{$T}) = _exponential(_draw!(r, $T))
@@ -218,4 +227,7 @@ function Random.seed!(r::Stateful{K}, seed::Integer) where {K}
     return r
 end
 
-Random.seed!(r::Stateful) = Random.seed!(r, rand(Random.RandomDevice(), UInt128))
+Random.seed!(r::Stateful, device::Random.RandomDevice) =
+    Random.seed!(r, rand(device, UInt128))
+Random.seed!(r::Stateful, ::Nothing) = Random.seed!(r)
+Random.seed!(r::Stateful) = Random.seed!(r, Random.RandomDevice())

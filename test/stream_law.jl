@@ -73,6 +73,28 @@ end
     @test all(rand_at(rng, Bool, i) == C[i] for i = 1:64n)
 end
 
+@testset "stream law: addressed span boundaries" begin
+    rng = Tandem8x32(42)
+    last = typemax(UInt64) ÷ 64
+    tail = TandemRNG._advance(rng, 64 * (last - 1))
+    @test rand_at(rng, UInt64, BigInt(last)) == rand_next(tail, UInt64)[1]
+    @test_throws ArgumentError rand_at(rng, UInt64, UInt128(last) + 1)
+    @test_throws ArgumentError rand_at(rng, UInt64, (UInt128(1) << 58) + 1)
+    @test_throws ArgumentError rand_at(rng, Bool, BigInt(1) << 128)
+
+    # The second component must fit, with the same real-component alignment as a fill.
+    rng = rand_next(rng, Bool)[2]
+    expected, _ = scalar_loop(rng, ComplexF32, 3)
+    @test [rand_at(rng, ComplexF32, BigInt(i)) for i = 1:3] == expected
+    last_complex = (typemax(UInt64) - 32) ÷ 64
+    @test_throws ArgumentError rand_at(rng, ComplexF32, last_complex + 1)
+
+    # Sequential scalars retain their intentional wrapping policy.
+    tail = TandemRNG._advance(rng, typemax(UInt64))
+    @test rngposition(rand_next(tail, UInt64)[2]) == 64
+    @test_throws ArgumentError rand_at(tail, UInt64, 1)
+end
+
 @testset "stream law: mixed scalar boundaries" begin
     for K in (1, 32, 64), pos in (1, 63, 127, 1023, 1024 * K - 1)
         rng = Tandem8x32{K}(rngkey(Tandem8x32(42)), pos)

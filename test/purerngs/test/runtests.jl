@@ -69,6 +69,7 @@ end
 end
 
 include("engine.jl")
+include("interface.jl")
 
 if get(ENV, "TANDEM_TEST_CUDA", "false") == "true"
     include("cuda.jl")

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Native `Stateful` default normal and exponential draws now use the same Float64
+  algorithms as their typed forms. It supports `copy!` and all standard reseed forms.
+- `StatefulRNG` aliases `Stateful`. Native `rand_next!`, `randn_next`, `randn_next!`,
+  `randexp_next`, and `randexp_next!` provide continuation names with native stream laws.
+- Uniform addressed draws reject alignment and span overflow, including complex pairs.
+  Scalar continuation draws retain their wrapping behavior.
+- The PureRNGs extension requires 0.0.2 and uses its mutable sampler bridge. Normal,
+  exponential, and packed-bit draws now match PureRNGs continuations through that bridge.
+  Native `Stateful` keeps Tandem's sampler laws. Unified `!!` adapters support immutable
+  Tandem generators and preserve PureRNGs' destination replacement and alias rules.
+- PureRNGs uniform allocations accept `threaded`, and uniform addressed draws accept
+  contiguous index ranges. A bare tuple now means a population in `PureRNGs.rand_next`.
+  Replace `PureRNGs.rand_next(rng, dims)` with `PureRNGs.rand_next(rng, Float64, dims)`
+  when `dims` is a tuple shape. Native Tandem's tuple shape shorthand stays available.
 - Float32 exponentials round to within 0.58 ulp, bit identical to tandem-c 1c75956 on the
   CPU and in Metal kernels, so every uniform on the 2^-24 grid maps back to itself. This
   changes Float32 exponential values. Uniforms, Float32 normals, Float64 exponentials and

@@ -60,6 +60,24 @@ jobs:
           files: lcov.info
           disable_search: true
           fail_ci_if_error: false
+  purerngs:
+    name: PureRNGs dev / CPU
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+    env:
+      JULIA_NUM_THREADS: '4'
+      TANDEM_REACTANT_BACKEND: cpu
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+      - name: Test the pinned PureRNGs extension
+        run: julia --startup-file=no --project=test/purerngs -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
   zig-tables:
     name: ziggurat tables are current
     runs-on: ubuntu-latest
