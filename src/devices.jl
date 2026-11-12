@@ -13,6 +13,8 @@ MLDataDevices.get_device_type(::_CUDABackend) = MLDataDevices.CUDADevice
 MLDataDevices.get_device_type(::_AMDGPUBackend) = MLDataDevices.AMDGPUDevice
 MLDataDevices.get_device_type(::_MetalBackend) = MLDataDevices.MetalDevice
 
+_backend_device(token::_BackendToken) = MLDataDevices.get_device_type(token)()
+
 @inline function _check_fill_device(rng, destination)
     generator_device = MLDataDevices.get_device_type(rng.device)
     destination_device = MLDataDevices.get_device_type(destination)

@@ -31,6 +31,10 @@ Tokens identify a backend, not a physical GPU. Select the physical device throug
 the backend, such as `CUDA.device!`, before allocation and execution.
 Keep the active device and arrays consistent.
 
+`MLDataDevices.get_device(rng)` returns the bound backend device. With CUDA or
+AMDGPU loaded, it resolves the active physical device at query time, as PureRNGs
+does. `get_device((rng, values))` therefore composes with arrays on that device.
+
 ## Backend support
 
 | Backend | Binding | Array draw types |

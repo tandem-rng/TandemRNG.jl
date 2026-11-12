@@ -62,6 +62,7 @@ end
 (device::MLDataDevices.AbstractDevice)(::Tandem8x32) =
     throw(ArgumentError("unsupported MLDataDevices device type: $(typeof(device))"))
 MLDataDevices.get_device_type(rng::Tandem8x32) = MLDataDevices.get_device_type(rng.device)
+MLDataDevices.get_device(rng::Tandem8x32) = _backend_device(rng.device)
 
 @inline function _check_serviceability(
     ::Tandem8x32{K,_MetalBackend},

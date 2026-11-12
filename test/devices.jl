@@ -6,6 +6,7 @@ struct UnsupportedDevice <: MLDataDevices.AbstractDevice end
     cpu = last(rand_next(Tandem8x32(42), Bool))
     for device in (CPUDevice(), CUDADevice(), AMDGPUDevice(), MetalDevice())
         bound = @inferred device(cpu)
+        @test MLDataDevices.get_device(bound)(bound) == bound
         @test CPUDevice()(bound) == cpu
         @test chunk_length(typeof(bound)) == chunk_length(cpu)
         for T in (Bool, UInt32, Float64)
@@ -29,6 +30,7 @@ struct UnsupportedDevice <: MLDataDevices.AbstractDevice end
         @test parent(Stateful(bound)) == cpu
     end
     values, after = @inferred rand_next(cpu, Float64, 17, 3)
+    @test MLDataDevices.get_device((cpu, values)) == MLDataDevices.get_device(values)
     expected = similar(values)
     @test rand_fill!(cpu, expected) == after
     @test values == expected

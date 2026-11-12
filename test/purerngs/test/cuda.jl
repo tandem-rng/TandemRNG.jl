@@ -5,6 +5,14 @@ using CUDA
     device = TR.MLDataDevices.CUDADevice()
     to_cpu = TR.MLDataDevices.CPUDevice()
     rng = device(cpu)
+    for active in CUDA.devices()
+        CUDA.device!(active) do
+            values = CUDA.zeros(Float32, 3)
+            @test TR.MLDataDevices.get_device(rng) == TR.MLDataDevices.get_device(values)
+            @test TR.MLDataDevices.get_device((rng, values)) ==
+                  TR.MLDataDevices.get_device(values)
+        end
+    end
     values, after = PR.rand_next(rng, Float64, 17, 3)
     expected, expected_rng = PR.rand_next(cpu, Float64, 17, 3)
     @test values isa CuArray

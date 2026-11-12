@@ -1,5 +1,8 @@
 @testset "PureRNGs interface alignment" begin
     rng = last(TR.rand_next(TR.Tandem8x32(42), Bool))
+    device = TR.MLDataDevices.get_device(rng)
+    @test device == TR.MLDataDevices.get_device(PR.Philox4x32(42))
+    @test device(rng) == rng
     for threaded in (false, true), T in (Bool, Float32, ComplexF64, Char)
         @test PR.rand_next(rng, T, (3, 5); threaded) == TR.rand_next(rng, T, 3, 5)
         @test PR.rand_at(rng, T, 3:7; threaded) == [TR.rand_at(rng, T, i) for i = 3:7]
