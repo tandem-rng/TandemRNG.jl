@@ -10,6 +10,8 @@ const _ArrayFamilies = (AMDGPU.ROCArray{T,N,AMDGPU.Mem.HIPBuffer} where {T,N},)
 const _Float64 = true
 const _Backend = TandemRNG._AMDGPUBackend
 const _DeviceExt = :AMDGPUExt
+TandemRNG._backend_device(::_Backend) =
+    TandemRNG.MLDataDevices.AMDGPUDevice(AMDGPU.device())
 TandemRNG._allocate_array(::_Backend, ::Type{T}, dims::Dims) where {T} =
     AMDGPU.ROCArray{T}(undef, dims)
 function _precompile_device()
