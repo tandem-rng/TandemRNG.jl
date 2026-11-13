@@ -31,11 +31,10 @@ need not retain identical output across Julia versions.
 
 ## PureRNGs
 
-Loading both packages enables TandemRNG's PureRNGs extension, which requires
-PureRNGs 0.0.2. PureRNGs 0.0.1 lacks the external wrapper hook.
-Use qualified names to avoid conflicts between their exported functions.
-
-An unregistered PureRNGs development version works too. Install it by URL:
+Loading both packages enables TandemRNG's PureRNGs extension. For now, use
+PureRNGs' `dev` branch, which identifies itself as version 0.0.2. The registered
+0.0.1 release lacks the external wrapper hook and is not supported by the extension.
+Install the development branch explicitly:
 
 ```julia
 using Pkg
@@ -43,7 +42,8 @@ Pkg.add(url = "https://github.com/BJMCox/PureRNGs.jl", rev = "dev")
 ```
 
 The extension's conformance project tracks that branch. CI updates PureRNGs to
-the latest `dev` head before testing.
+the latest `dev` head before testing. Use qualified names to avoid conflicts
+between the packages' exported functions.
 
 ```julia
 import PureRNGs, TandemRNG
