@@ -34,6 +34,14 @@ z, rng = normal_next(rng)               # ziggurat, bit identical to tandem-c
 i, rng = choice_next(rng, ChoiceTable([1, 2, 3, 4]))   # weighted index, alias table
 ```
 
+The optional PureRNGs extension currently requires its `dev` branch. The registered
+PureRNGs 0.0.1 release lacks the external wrapper hook. Install `dev` explicitly:
+
+```julia
+using Pkg
+Pkg.add(url="https://github.com/BJMCox/PureRNGs.jl", rev="dev")
+```
+
 The [documentation](https://tandem-rng.github.io/TandemRNG.jl/) covers derived draws, devices,
 integrations, speed, and the [validation evidence](https://github.com/tandem-rng/TandemRNG.jl/releases/tag/statistical-evidence-2026-09-27).
 [`benchmark/README.md`](benchmark/README.md) reproduces the measurements.

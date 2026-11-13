@@ -3,8 +3,9 @@
 Use Julia 1.13 or later with the `TandemRNG.jl` checkout.
 TandemRNG owns the bridge. PureRNGs needs no Tandem-specific extension.
 `Project.toml` tracks PureRNGs' `dev` branch by URL and uses the local Tandem source.
-No PureRNGs registration or release is required. The CPU CI job uses this project.
-CI refreshes PureRNGs before testing, so it tests the latest `dev` head.
+The registered 0.0.1 release lacks the external wrapper hook. This project requires
+0.0.2 from `dev`. The CPU CI job refreshes PureRNGs before testing, so it tests the
+latest `dev` head rather than the registered release.
 
 From the TandemRNG root, run:
 
