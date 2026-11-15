@@ -60,6 +60,27 @@ jobs:
           files: lcov.info
           disable_search: true
           fail_ci_if_error: false
+  purerngs-minimum:
+    name: PureRNGs dev / Julia 1.10 CPU bridge
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: read
+    env:
+      JULIA_NUM_THREADS: '4'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1.10'
+      - uses: julia-actions/cache@v3
+      - name: Fetch the latest PureRNGs dev
+        run: |
+          git clone --depth 1 --branch dev https://github.com/BJMCox/PureRNGs.jl ../PureRNGs.jl
+          git -C ../PureRNGs.jl rev-parse HEAD
+      - name: Test the minimum Julia bridge
+        run: julia --startup-file=no --project=test/purerngs_cpu -e 'using Pkg; Pkg.develop([PackageSpec(path="."), PackageSpec(path="../PureRNGs.jl")]); Pkg.test()'
   purerngs:
     name: PureRNGs dev / CPU
     runs-on: ubuntu-latest
