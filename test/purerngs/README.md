@@ -1,6 +1,8 @@
 # PureRNGs bridge conformance
 
 Use Julia 1.13 or later with the `TandemRNG.jl` checkout.
+For Julia 1.10 bridge checks without CUDA or Reactant, use
+[`test/purerngs_cpu`](../purerngs_cpu/README.md).
 TandemRNG owns the bridge. PureRNGs needs no Tandem-specific extension.
 `Project.toml` tracks PureRNGs' `dev` branch by URL and uses the local Tandem source.
 The registered 0.0.1 release lacks the external wrapper hook. This project requires

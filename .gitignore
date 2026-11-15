@@ -11,3 +11,4 @@
 /test/Manifest*.toml
 /test/reactant/Manifest*.toml
 /test/purerngs/Manifest*.toml
+/test/purerngs_cpu/Manifest*.toml
