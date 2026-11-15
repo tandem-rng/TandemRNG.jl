@@ -1,6 +1,6 @@
 # Reproducing the benchmarks
 
-These runners compare public APIs through repeated measurements. The output records
+The main runners compare public APIs through repeated measurements. The output records
 the configuration, Julia and package versions, source hashes, environment, and status.
 Each run requires a new output directory. A failed run retains its partial results.
 
@@ -53,6 +53,41 @@ julia --startup-file=no --threads=14 --project=benchmark benchmark/draws.jl 22 3
 
 `benchmarks.jl` also exposes `SUITE` for BenchmarkTools and
 `compare_cpu(io; sizes, passes, seconds, samples, seed, threaded)` for Julia callers.
+
+## PureRNGs mutable wrapper
+
+This optional environment requires Julia 1.13 or newer. It tracks PureRNGs `dev`,
+which supplies the external-engine wrapper hook. It adds no dependencies to the
+ordinary CPU benchmark environment. Run from the TandemRNG repository root:
+
+```sh
+julia --startup-file=no --project=benchmark/purerngs -e 'using Pkg; Pkg.instantiate(); Pkg.update("PureRNGs"); Pkg.precompile()'
+julia --startup-file=no --threads=1 --project=benchmark/purerngs benchmark/purerngs/stateful.jl 3 0.3 > stateful.tsv
+```
+
+The runner compares `PureRNGs.StatefulRNG(Tandem8x32(42))` with native
+`Stateful(Tandem8x32(42))` through public `rand` scalar chains and `rand!`
+destination fills. UInt32, Float32, and Float64 uniforms share exact stream laws.
+The runner checks every scalar output, fill output, complete continued state,
+and type inference before timing.
+Normals and exponentials use different laws and do not enter this comparison.
+
+Each sample uses fresh mutable state, with `evals=1`. Construction, destination
+allocation, compilation, first touch, fill checksums, and continuation checks occur
+outside timed work. Scalar chains include checksum accumulation and one final store.
+Fill checksums and the next UInt32 keep destination writes and continued state
+observable in untimed teardown.
+Passes alternate wrapper order. Output includes per-pass best and median time,
+allocated bytes, allocation counts, checksums, and the next UInt32. The final
+lines report repeated median ranges in nanoseconds per element. The output also
+records source hashes and the resolved PureRNGs tree. Keep the output and
+`benchmark/purerngs/Manifest.toml` with any reported result.
+
+The positional settings are passes and seconds per case. Julia callers can use
+`compare_stateful(io; sizes, passes, seconds, samples, seed)` for a shorter run.
+These are warm CPU API measurements. Use one Julia thread for the wrapper
+comparison. With more threads, native `rand!` may run a threaded fill while the
+bridge stays serial, so those results compare different execution paths.
 
 ## CUDA setup
 
