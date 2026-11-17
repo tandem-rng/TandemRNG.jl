@@ -1,10 +1,9 @@
 @setup_workload let
     types = Base.uniontypes(DrawTypes)
-    # Two groups at K=64 exercise group boundaries with a small allocation.
+    # Exercise group boundaries at the default chunk length.
     arrays = map(T -> Vector{T}(undef, 2 * 1024 * 64 ÷ draw_bits(T) + 3), types)
     @compile_workload begin
-        for power = 0:16
-            K = 1 << power
+        let K = DEFAULT_CHUNK_LENGTH
             rng = Tandem8x32{K}(42)
             Tandem8x32{K}(UInt128(42))
             Tandem8x32{K}(rngkey(rng), UInt64(128))
@@ -79,15 +78,13 @@
         rand_next(rng, (3, 5))
         rand_next(rng, 3, 5)
         # Binding and host scalar arithmetic need no GPU driver.
-        for K in (1, 32, 64),
-            device in (
-                MLDataDevices.CPUDevice(),
-                MLDataDevices.CUDADevice(),
-                MLDataDevices.AMDGPUDevice(),
-                MLDataDevices.MetalDevice(),
-            )
-
-            bound = device(Tandem8x32{K}(42))
+        for device in (
+            MLDataDevices.CPUDevice(),
+            MLDataDevices.CUDADevice(),
+            MLDataDevices.AMDGPUDevice(),
+            MLDataDevices.MetalDevice(),
+        )
+            bound = device(Tandem8x32(42))
             for T in types
                 rand_next(bound, T)
                 rand_at(bound, T, 3)
