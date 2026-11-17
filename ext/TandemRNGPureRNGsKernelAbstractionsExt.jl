@@ -2,6 +2,7 @@ module TandemRNGPureRNGsKernelAbstractionsExt
 
 import TandemRNG as TR
 import PureRNGs as PR
+using GPUArraysCore: AbstractGPUArray
 using KernelAbstractions
 
 # Device cursors use scalar words, so no host state builder enters device code.
@@ -340,8 +341,16 @@ function _fill_tiles!(
     engine = _TileEngine{K,typeof(backend)}(rng.key, backend)
     # A 16 KiB input tile leaves 16 KiB for a draw crossing its end.
     bits = 131072
-    stop = start + UInt64(length(destination)) * UInt64(count * S)
+    n = length(destination)
+    stop = start + UInt64(n) * UInt64(count * S)
     threads = count <= 2 ? (S == 32 ? 128 : min(256, 8192 ÷ S)) : 64
+    # More threads help the Float32 transform at these sizes. Larger fills
+    # lose throughput with the wider group on some CUDA devices.
+    if K == 32 && S == 32 && count == 1 && rng.device isa TR._CUDABackend &&
+       codec isa PR._NormalCodec && destination isa AbstractGPUArray{Float32,1} &&
+       4096 <= n <= 1048576
+        threads = 256
+    end
     group_bits = UInt64(K * TR.ROW_BITS)
     if group_bits > UInt64(bits) && stop - start > UInt64(bits)
         # One tile cannot reuse state. Longer fills retain it across the tiles

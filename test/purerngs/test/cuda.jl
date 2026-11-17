@@ -39,4 +39,17 @@ using CUDA
     @test to_cpu(after) == expected_rng
 end
 
+@testset "CUDA Float32 normal fill preserves the stream with wider groups" begin
+    cpu = last(PR.rand_next(TR.Tandem8x32{32}(42), Bool))
+    rng = TR.MLDataDevices.CUDADevice()(cpu)
+    output = CuArray{Float32}(undef, 4096)
+    reference = CuArray{Float32}(undef, 4096, 1)
+    returned, after = PR.randn_next!(rng, output)
+    _, expected = PR.randn_next!(rng, reference)
+    CUDA.synchronize()
+    @test returned === output
+    @test after == expected
+    @test reinterpret(UInt32, Array(output)) == reinterpret(UInt32, vec(Array(reference)))
+end
+
 include("cuda_scalar.jl")
