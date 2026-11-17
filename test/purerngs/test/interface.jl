@@ -118,3 +118,34 @@ end
     native = TR.Stateful(42)
     @test randn(native) == first(TR.normal_next(TR.Tandem8x32(42)))
 end
+
+@testset "Cached bridge crosses rows and chunks" begin
+    origin = TR.Tandem8x32{32}(42)
+    for position in (UInt64(1024 - 32), UInt64(32 * 1024 - 32), typemax(UInt64) - 31)
+        starting = TR._advance(origin, position)
+        cursor = starting
+        bridge = PR.StatefulRNG(cursor)
+        snapshot = parent(bridge)
+        for (draw, next, T) in (
+            (randn, PR.randn_next, ComplexF32),
+            (randexp, PR.randexp_next, Float16),
+            (rand, PR.rand_next, Char),
+            (rand, PR.rand_next, UInt128),
+        )
+            expected, cursor = next(cursor, T)
+            @test draw(bridge, T) == expected
+            @test parent(bridge) == cursor
+        end
+        replay = copy(bridge)
+        @test rand(replay, UInt32) == first(TR.rand_next(cursor, UInt32))
+        @test parent(bridge) == cursor
+        @test snapshot == starting
+    end
+
+    last = TR._advance(origin, typemax(UInt64) - 63)
+    bridge = PR.StatefulRNG(last)
+    destination = fill(-1.0, 2)
+    @test_throws ArgumentError rand!(bridge, destination)
+    @test parent(bridge) == last
+    @test all(==(-1.0), destination)
+end

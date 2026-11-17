@@ -14,6 +14,7 @@
   Scalar continuation draws retain their wrapping behavior.
 - The PureRNGs extension requires 0.0.2 and uses its mutable sampler bridge. Normal,
   exponential, and packed-bit draws now match PureRNGs continuations through that bridge.
+- The PureRNGs bridge uses Tandem's native row cache for scalar draws.
   Native `Stateful` keeps Tandem's sampler laws. Unified `!!` adapters support immutable
   Tandem generators and preserve PureRNGs' destination replacement and alias rules.
 - PureRNGs uniform allocations accept `threaded`, and uniform addressed draws accept

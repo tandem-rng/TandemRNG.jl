@@ -116,12 +116,44 @@ end
 
 PureRNGs.StatefulRNG(rng::TR.Tandem8x32) =
     PureRNGs._stateful_rng(TR.MLDataDevices.CPUDevice()(rng))
+PureRNGs._bridge_storage(rng::TR.Tandem8x32) = TR.Stateful(rng)
+@inline PureRNGs._bridge_parent(storage::TR.Stateful) = parent(storage)
+PureRNGs._bridge_adopt!(storage::TR.Stateful{K}, rng::TR.Tandem8x32{K}) where {K} =
+    TR._adopt!(storage, rng)
+
+@inline PureRNGs._bridge_draw!(
+    bridge::PureRNGs.StatefulRNG{<:TR.Tandem8x32,Nothing,<:TR.Stateful},
+    ::typeof(PureRNGs.rand_next),
+    ::Type{T},
+) where {T<:TR.DrawTypes} = Random.rand(bridge.backing, T)
+
+@inline function PureRNGs._take_bits(
+    ::TR.Tandem8x32,
+    cursor::TR.Stateful,
+    width::Val{W},
+) where {W}
+    raw = Random.rand(cursor, _slot_type(width))
+    return UInt64(raw) >> (_slot_bits(width) - W), cursor
+end
+
+for (draw, Codec) in ((:randn_next, :_NormalCodec), (:randexp_next, :_ExponentialCodec))
+    @eval @inline function PureRNGs._bridge_draw!(
+        bridge::PureRNGs.StatefulRNG{<:TR.Tandem8x32,Nothing,<:TR.Stateful},
+        ::typeof(PureRNGs.$draw),
+        ::Type{T},
+    ) where {T}
+        storage = bridge.backing
+        codec = PureRNGs.$Codec(PureRNGs._engine_backend(storage.value))
+        return first(PureRNGs._codec_take(codec, storage.value, storage, T))
+    end
+end
+
 PureRNGs._fresh_bridge_rng(::TR.Tandem8x32{K}, seed::Integer) where {K} =
     TR.Tandem8x32{K}(seed)
 PureRNGs._fresh_bridge_rng(rng::TR.Tandem8x32, device::Random.RandomDevice) =
     PureRNGs._fresh_bridge_rng(rng, rand(device, UInt128))
 Random.rand(bridge::PureRNGs.StatefulRNG{<:TR.Tandem8x32}, ::Random.SamplerType{Char}) =
-    PureRNGs._commit_bridge!(bridge, PureRNGs.rand_next(parent(bridge), Char))
+    PureRNGs._bridge_draw!(bridge, PureRNGs.rand_next, Char)
 
 include("purerngs_engine.jl")
 include("purerngs_unified.jl")
