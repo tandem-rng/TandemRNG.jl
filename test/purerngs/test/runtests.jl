@@ -29,7 +29,8 @@ function compiled_bridge(rng, destination)
     rng,
     allocated,
     PR.splitrng(rng, Val(3)),
-    PR.subrng(rng, 17)
+    PR.subrng(rng, 17),
+    PR.subrng(rng, 3, UInt64(17), 1)
 end
 
 @testset "Tandem bridge through Reactant" begin
@@ -49,6 +50,7 @@ end
         @test Array(actual[5]) == expected[5]
         @test map(TR.Tandem8x32, actual[6]) == expected[6]
         @test TR.Tandem8x32(actual[7]) == expected[7]
+        @test TR.Tandem8x32(actual[8]) == expected[8]
         @test Array(output) == destination
     end
     @test_throws ArgumentError PR.rand_next(input, Normal())

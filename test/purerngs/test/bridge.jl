@@ -28,6 +28,28 @@
     end
 end
 
+@testset "PureRNGs purpose derivation" begin
+    root = TR.Tandem8x32(42)
+    rng = last(TR.rand_next(root, Bool))
+    for purpose in (0, typemax(UInt64), big(17))
+        @test PR.subrng(rng, purpose) == TR.subrng(root, purpose)
+    end
+    path = (UInt8(3), UInt64(17), big(1))
+    expected = TR.subrng(TR.subrng(TR.subrng(root, path[1]), path[2]), path[3])
+    @test (@inferred PR.subrng(rng, path...)) == expected
+    @test PR.subrng(rng, 3, 17) == TR.subrng(TR.subrng(root, 3), 17)
+    device = TR.MLDataDevices.CUDADevice()
+    @test PR.subrng(device(rng), path...) == device(expected)
+    for purpose in (true, -1, UInt128(1) << 64)
+        @test_throws ArgumentError PR.subrng(rng, purpose)
+        @test_throws ArgumentError PR.subrng(rng, 3, purpose)
+    end
+    @test PR.rngposition(rng) == 1
+    @test TR.subrng(rng, true) == TR.subrng(rng, 1)
+    @test TR.subrng(rng, -1) == TR.subrng(rng, typemax(UInt64))
+    @test TR.subrng(rng, UInt128(1) << 64) == TR.subrng(rng, 0)
+end
+
 @testset "Tandem bridge" begin
     rng = TR.Tandem8x32(42)
     bit, shifted = PR.rand_next(rng, Bool)

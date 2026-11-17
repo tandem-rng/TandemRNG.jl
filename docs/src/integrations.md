@@ -66,6 +66,12 @@ stateful = PureRNGs.StatefulRNG(rng)
 | `StatefulRNG` | A CPU-bound PureRNGs wrapper using PureRNGs' sampler laws |
 | `randgen!!`, `randset!!`, and their primitive variants | Pure continuations or mutable draws with PureRNGs' storage rules |
 
+`PureRNGs.subrng(rng, id)` accepts integer IDs in `0:typemax(UInt64)`, excluding
+`Bool`. It rejects out-of-range IDs. Several IDs form a path:
+`PureRNGs.subrng(rng, a, b)` equals `PureRNGs.subrng(PureRNGs.subrng(rng, a), b)`.
+Every ID is checked before derivation. Paths also work with static IDs in Reactant.
+Native `TandemRNG.subrng(rng, id)` retains its modulo-2^64 ID rule.
+
 `PureRNGs.rand_next(rng, (2, 3))` samples the tuple as a population. Earlier
 Tandem extensions treated that tuple as dimensions. Use
 `PureRNGs.rand_next(rng, Float64, (2, 3))` for a matrix. Native
