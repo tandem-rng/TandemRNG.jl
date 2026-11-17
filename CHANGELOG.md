@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- CUDA Float32 normal vector fills through PureRNGs use wider workgroups for
+  4,096 to 1,048,576 draws at the default chunk length. Stream values are unchanged.
+
 - PureRNGs `subrng` accepts checked UInt64-range IDs and nested integer paths.
   Native Tandem purpose IDs retain modulo-2^64 behavior.
 - `MLDataDevices.get_device(rng)` matches PureRNGs' device lookup and composes with
