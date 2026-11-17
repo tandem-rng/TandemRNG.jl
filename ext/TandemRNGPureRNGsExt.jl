@@ -94,7 +94,26 @@ function PureRNGs.splitrng(rng::TR.Tandem8x32, n::Integer; threaded = false)
     _check_threaded(threaded)
     return TR.splitrng(rng, n; threaded)
 end
-PureRNGs.subrng(rng::Generator, purpose::Integer) = TR.subrng(rng, purpose)
+# Keep checked purpose IDs local, as for the threaded keyword above.
+@inline function _checked_purpose(purpose::Integer)
+    !(purpose isa Bool) && 0 <= purpose <= typemax(UInt64) ||
+        throw(ArgumentError("purpose must be in 0:typemax(UInt64), excluding Bool"))
+    return purpose % UInt64
+end
+
+PureRNGs.subrng(rng::Generator, purpose::Integer) =
+    TR.subrng(rng, _checked_purpose(purpose))
+
+function PureRNGs.subrng(
+    rng::Generator,
+    first_purpose::Integer,
+    second_purpose::Integer,
+    purposes::Integer...,
+)
+    ids = map(_checked_purpose, (first_purpose, second_purpose, purposes...))
+    return foldl(TR.subrng, ids; init = rng)
+end
+
 PureRNGs.StatefulRNG(rng::TR.Tandem8x32) =
     PureRNGs._stateful_rng(TR.MLDataDevices.CPUDevice()(rng))
 PureRNGs._fresh_bridge_rng(::TR.Tandem8x32{K}, seed::Integer) where {K} =

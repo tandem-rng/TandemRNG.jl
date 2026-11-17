@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- PureRNGs `subrng` accepts checked UInt64-range IDs and nested integer paths.
+  Native Tandem purpose IDs retain modulo-2^64 behavior.
 - `MLDataDevices.get_device(rng)` matches PureRNGs' device lookup and composes with
   arrays. CUDA and AMDGPU resolve the active physical device at query time.
 - Native `Stateful` default normal and exponential draws now use the same Float64
