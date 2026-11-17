@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- CPU precompilation now covers the default chunk length. Other chunk lengths
+  compile on first use, with the same streams.
+
 - CUDA Float32 normal vector fills through PureRNGs use wider workgroups for
   4,096 to 1,048,576 draws at the default chunk length. Stream values are unchanged.
 

@@ -32,9 +32,9 @@ Host scalar calls on a GPU-bound generator still run on the host.
 ## Precompilation
 
 PrecompileTools runs automatically during package precompilation. CPU workloads
-cover all 17 chunk lengths, all 18 draw types, fills, derivations, and `Stateful`.
-The default chunk length also covers matrices, views, allocating draws, and bulk
-normal and exponential draws. This coverage increases precompile time and cache size.
+cover the default chunk length (K=32), all 18 draw types, fills, derivations, and
+`Stateful`. They include matrices, views, allocating draws, and bulk normal and
+exponential draws. Other chunk lengths compile their methods on first use.
 
 Optional backend extensions precompile host methods when the backend,
 KernelAbstractions, and GPUArraysCore are installed. Metal also needs GPUArrays.
