@@ -61,7 +61,7 @@ jobs:
           disable_search: true
           fail_ci_if_error: false
   purerngs-minimum:
-    name: PureRNGs dev / Julia 1.10 CPU bridge
+    name: PureRNGs registry / Julia 1.10 CPU bridge
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -75,12 +75,8 @@ jobs:
         with:
           version: '1.10'
       - uses: julia-actions/cache@v3
-      - name: Fetch the latest PureRNGs dev
-        run: |
-          git clone --depth 1 --branch dev https://github.com/BJMCox/PureRNGs.jl ../PureRNGs.jl
-          git -C ../PureRNGs.jl rev-parse HEAD
-      - name: Test the minimum Julia bridge
-        run: julia --startup-file=no --project=test/purerngs_cpu -e 'using Pkg; Pkg.develop([PackageSpec(path="."), PackageSpec(path="../PureRNGs.jl")]); Pkg.test()'
+      - name: Test the registered bridge on minimum Julia
+        run: julia --startup-file=no --project=test/purerngs_cpu -e 'using Pkg; Pkg.develop(path="."); Pkg.test()'
   purerngs:
     name: PureRNGs dev / CPU
     runs-on: ubuntu-latest
@@ -98,7 +94,9 @@ jobs:
           version: '1'
       - uses: julia-actions/cache@v3
       - name: Test the latest PureRNGs dev
-        run: julia --startup-file=no --project=test/purerngs -e 'using Pkg; Pkg.instantiate(); Pkg.update("PureRNGs"); Pkg.test()'
+        run: >-
+          julia --startup-file=no --project=test/purerngs -e
+          'using Pkg; Pkg.add(url="https://github.com/BJMCox/PureRNGs.jl", rev="dev"); Pkg.test()'
   zig-tables:
     name: ziggurat tables are current
     runs-on: ubuntu-latest
