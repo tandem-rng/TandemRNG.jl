@@ -56,12 +56,11 @@ julia --startup-file=no --threads=14 --project=benchmark benchmark/draws.jl 22 3
 
 ## PureRNGs mutable wrapper
 
-This optional environment requires Julia 1.13 or newer. It tracks PureRNGs `dev`,
-which supplies the external-engine wrapper hook. It adds no dependencies to the
-ordinary CPU benchmark environment. Run from the TandemRNG repository root:
+This optional environment requires Julia 1.13 or newer and uses registered
+PureRNGs 0.0.2. Run from the TandemRNG repository root:
 
 ```sh
-julia --startup-file=no --project=benchmark/purerngs -e 'using Pkg; Pkg.instantiate(); Pkg.update("PureRNGs"); Pkg.precompile()'
+julia --startup-file=no --project=benchmark/purerngs -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
 julia --startup-file=no --threads=1 --project=benchmark/purerngs benchmark/purerngs/stateful.jl 3 0.3 > stateful.tsv
 ```
 
